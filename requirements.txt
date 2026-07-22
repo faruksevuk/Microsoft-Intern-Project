@@ -1,0 +1,7 @@
+foundry-local-sdk-winml
+openai
+nicegui
+pywebview
+pypdf
+python-pptx
+httpx

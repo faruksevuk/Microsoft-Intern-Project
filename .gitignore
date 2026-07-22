@@ -1,0 +1,15 @@
+# Private data — never pushed. Only the framework (src, schema, rules, templates) is shared.
+memory/
+chats/
+cache/
+decks/
+scratch_decks/
+# eval scratch corpora are COPIES of the private brain
+scripts/abeval/
+scripts/adveval/
+scripts/jarviseval/
+scripts/pathseval/
+scripts/gateeval/
+*.db
+__pycache__/
+.venv/
