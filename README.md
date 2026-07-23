@@ -4,6 +4,8 @@ A fully-local second brain that learns from being used. No cloud, no API keys, n
 
 Built during the Microsoft summer school project *"Local RAG AI Assistant with Foundry Local"*, then taken considerably further.
 
+📖 **[the story](docs/story.html)** — an animated walkthrough of how the system works, what was borrowed from [SkillOpt](https://arxiv.org/abs/2605.23904)/[AlphaEvolve](https://arxiv.org/abs/2506.13131)/[jcode](https://github.com/1jehuang/jcode) and what changed, with per-claim proof links. Also available in-app (the ⓘ tab).
+
 ## the idea
 
 Small local models are weak. You cannot fix that with prompting, and you cannot run a big model on a 4GB RTX 3050. So this project takes the other road: **hold the model constant, make everything around it learn.** Memory is markdown files with YAML frontmatter (readable, diffable, yours). Retrieval is a decision policy, not a lookup. And every mechanism that self-modifies must pass a validation gate before its change is kept — because a system that edits itself without one will eventually talk itself off a cliff (Microsoft's SkillOpt team [measured that cliff](https://arxiv.org/abs/2605.23904): −52.8 points in five nights, ungated).
@@ -13,7 +15,9 @@ Four things here learn from use, none of them touch model weights:
 1. **desire paths** — a memory that gets found-and-cited earns the query as a `found_by` trace; drifted future phrasings then find it. Measured: drift-query hit@1 went **0/5 → 4/5** after single use.
 2. **self-tuning retrieval** — how many memories to retrieve (`rel_floor`) is learned from citation feedback, band-clamped, evidence-gated. Measured: over-retrieval k 7.0 → 3.8 with hit@1 flat.
 3. **consolidation ("sleep")** — the brain probes each memory with its own content; unfindable ones get doc2query repair questions, contradictions get flagged. Measured: findability health **50% → 80%** in one pass.
-4. **abilities** — reusable *methods* (procedural memory), typed `format` / `domain` / `process`. Learned once from research, then applied to fresh volatile data. The stock price is never stored; *how to analyze a stock* is.
+4. **abilities** — reusable *methods* (procedural memory), typed `format` / `domain` / `process`. Learned once from research, then applied to fresh volatile data. The stock price is never stored; *how to analyze a stock* is. Abilities also **evolve**, AlphaEvolve-style: diverse variants are generated, scored by a deterministic evaluator (first-try parse + structure + grounding), and the winner is adopted only with owner approval — losers are archived and never re-proposed. Measured, generation 1: **0.667 → 0.800**.
+
+All of it sits behind a **held-out validation gate** (`src/gate.py`): every self-modification is re-measured on curated tasks and rolled back if the score drops. Live test: a harmful ranking edit (hit@1 0.583 → 0.333) was rejected and restored automatically.
 
 ## what it does
 
@@ -57,6 +61,18 @@ copy templates\owner.template.md memory\owner\owner.md   # then edit: who are yo
 First run downloads the models (qwen3-embedding-0.6b + phi-4-mini by default; override with `PRAG_CHAT_MODEL`). The app opens as a native window (NiceGUI + WebView2). Your brain starts empty — ingest a project, save a chat reflection, teach it an ability.
 
 Your data never leaves the machine. The only network calls are the ones *you* trigger (web research / ability learning), and fetched pages are treated strictly as data, never as instructions.
+
+### optional: a stronger brain over API
+
+The harness was designed to compensate for a weak model — point the *same* harness at a strong one and everything (planning, tool use, abilities) gets sharper. Any OpenAI-compatible endpoint works:
+
+```bash
+set PRAG_API_BASE=https://api.openai.com/v1     # or DeepSeek / OpenRouter / Groq / LAN vLLM
+set PRAG_API_KEY=sk-...
+set PRAG_API_MODEL=gpt-5.5-mini
+```
+
+All three set → chat runs remote. **Embeddings and the memory store always stay local**; be aware that chat prompts include retrieved memory text, so pick a provider you trust. Unset them to go back to fully-local.
 
 ## repo layout
 

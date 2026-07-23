@@ -23,6 +23,26 @@ EMBED_MODEL = "qwen3-embedding-0.6b"
 # beat qwen3.5-2b on grounding+format; qwen3.5-4b generation is broken in current Foundry runtime).
 # Override with PRAG_CHAT_MODEL (e.g. "qwen3.5-2b" for speed, "qwen2.5-1.5b" for Turkish chat).
 CHAT_MODEL = os.getenv("PRAG_CHAT_MODEL", "phi-4-mini")
+# Optional REMOTE chat backend (any OpenAI-compatible endpoint: OpenAI, DeepSeek, OpenRouter,
+# Groq, a LAN vLLM box, ...). Active only when ALL THREE are set; otherwise fully local.
+# Embeddings ALWAYS stay local (Foundry) - only chat prompts leave the machine, and chat
+# prompts include retrieved memory content, so choose the provider accordingly.
+API_BASE = os.getenv("PRAG_API_BASE", "")
+API_KEY = os.getenv("PRAG_API_KEY", "")
+API_MODEL = os.getenv("PRAG_API_MODEL", "")
+
+
+class RemoteChatClient:
+    """Minimal adapter exposing the same complete_streaming_chat() surface as the
+    Foundry client, so every call site works unchanged with a remote model."""
+
+    def __init__(self, base_url, api_key, model):
+        from openai import OpenAI
+        self._client = OpenAI(base_url=base_url, api_key=api_key)
+        self.model = model
+
+    def complete_streaming_chat(self, messages):
+        return self._client.chat.completions.create(model=self.model, messages=messages, stream=True)
 TOP_K = 3
 TOP_M_INDEX = 8         # stage-1: candidates taken from the always-loaded index
 K_RECALL = 2
@@ -49,6 +69,15 @@ CITE_LO = 0.40          # cited/retrieved below this = over-retrieving -> raise 
 MISS_HI = 0.20          # share of answers that cited nothing above this = under-serving -> lower floor
 POLICY_PATH = Path(__file__).resolve().parent.parent / "cache" / "policy.json"
 GATE_TASKS_PATH = Path(__file__).resolve().parent.parent / "cache" / "gate_tasks.json"
+EVOLUTION_PATH = Path(__file__).resolve().parent.parent / "cache" / "evolution.json"
+# fixed, memory-grounded eval topics for ability scoring (no flaky web during eval)
+EVOLVE_TOPICS = ["the foundry-rag project"]
+# AlphaEvolve-style diversity: each variant is asked for from a different angle
+MUTATION_ANGLES = [
+    "make each step more concrete and checkable",
+    "reorder the steps for better flow and delete any step that does not change the output",
+    "add the single most important step an expert would say is missing",
+]
 MAX_TURNS = 6           # recent pairs kept verbatim in the working window
 SESSION_CAP = 24        # total messages before a session is "full" (12 exchanges)
 
@@ -377,16 +406,24 @@ class MemoryEngine:
         em.load()
         self.embedder = em.get_embedding_client()
 
-        try:
-            cm = self.manager.catalog.get_model(CHAT_MODEL)
-        except Exception as ex:
-            raise RuntimeError(
-                f"Chat model '{CHAT_MODEL}' is not in the Foundry catalog "
-                f"(check `foundry model list`, or unset PRAG_CHAT_MODEL): {ex}"
-            )
-        cm.download(lambda p: None)
-        cm.load()
-        self.chat = cm.get_chat_client()
+        if API_BASE and API_KEY and API_MODEL:
+            # remote chat, local embeddings: the harness unchanged, the brain private,
+            # only chat completions (which include retrieved memory text) go to the provider
+            self.chat = RemoteChatClient(API_BASE, API_KEY, API_MODEL)
+            self.chat_label = f"remote:{API_MODEL}"
+            print(f"[engine] chat backend = {self.chat_label} ({API_BASE}); embeddings stay local")
+        else:
+            try:
+                cm = self.manager.catalog.get_model(CHAT_MODEL)
+            except Exception as ex:
+                raise RuntimeError(
+                    f"Chat model '{CHAT_MODEL}' is not in the Foundry catalog "
+                    f"(check `foundry model list`, or unset PRAG_CHAT_MODEL): {ex}"
+                )
+            cm.download(lambda p: None)
+            cm.load()
+            self.chat = cm.get_chat_client()
+            self.chat_label = f"local:{CHAT_MODEL}"
 
         self._cache = self._load_cache()
         self._cache_dirty = False
@@ -1709,6 +1746,102 @@ class MemoryEngine:
         prompt = (f"Apply the METHOD below to the DATA to answer: {query or 'analyze this'}. "
                   f"Use the data as facts; do not invent.\n\nMETHOD:\n{m['body']}\n\nDATA:\n{data[:4000]}")
         return self._complete_safe([{"role": "user", "content": prompt}]).strip()
+
+    # ---- ability evolution (AlphaEvolve x SkillOpt-Sleep, local scale) ----
+    # Generate variants of a stored method, score each with a DETERMINISTIC evaluator,
+    # keep the winner only with the owner's approval, remember losers so they are not
+    # re-proposed. Evolution is only safe where an objective function exists - this
+    # evaluator is that function for `format` abilities.
+    def ability_score(self, method_body, topics=None):
+        """Objective score of a format ability: for each fixed topic, produce a deck
+        with this method (max_repair=0 - first-try quality IS the ability's effect)
+        and grade it on parse success, structure, and grounding vs the context.
+        Deterministic given the corpus; no model-as-judge."""
+        topics = topics or EVOLVE_TOPICS
+        real_mark, real_record = self._mark_used, self._record_retrieval_feedback
+        self._mark_used = lambda picked: None
+        self._record_retrieval_feedback = lambda *a, **k: None
+        try:
+            total = 0.0
+            for topic in topics:
+                tri = self.triage(topic)
+                plan = planner.default_plan(topic, "slides", tri["memory_hit"])
+                plan["needs_research"] = False              # eval must not depend on flaky web
+                plan["_method"] = method_body
+                context, source = self.gather_context(topic, plan, tri)
+                deck = self.draft_slides(topic, plan=plan, context=context, source=source, max_repair=0)
+                if not deck:
+                    continue                                 # unusable output = 0 for this topic
+                s = 0.4 if not slidegen.deck_problems(deck) else 0.15
+                n = len(deck["slides"])
+                s += 0.2 if 5 <= n <= 7 else (0.1 if 3 <= n else 0.0)
+                bullets = ". ".join(b for sl in deck["slides"] for b in sl["bullets"])
+                bodies = [mm["body"] for mm in (tri.get("picked") or [])]
+                s += 0.4 * (self._grounding(bullets, bodies) if bodies else 0.5)
+                total += s
+            return round(total / len(topics), 3)
+        finally:
+            self._mark_used, self._record_retrieval_feedback = real_mark, real_record
+
+    def _load_evolution(self):
+        try:
+            return json.loads(EVOLUTION_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _save_evolution(self, data):
+        try:
+            EVOLUTION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            EVOLUTION_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+
+    def evolve_ability(self, ability_id, topics=None, n_variants=2):
+        """One evolution generation for a stored ability: score the current method,
+        generate diverse variants (each from a different mutation angle, told what
+        already failed), score them, and return a report. NOTHING is adopted here -
+        the owner approves via adopt_evolution (constitution: human in the loop).
+        Losers go to the rejected buffer so they inform, and are never re-proposed."""
+        m = self._find(ability_id)
+        if not m or m["meta"].get("type") != "ability":
+            return None
+        buf = self._load_evolution()
+        rejected = buf.get(ability_id, [])
+        rej_note = ""
+        if rejected:
+            tried = "\n---\n".join(r["body"][:300] for r in rejected[-3:])
+            rej_note = f"\nThese earlier variants scored WORSE - do not repeat their approach:\n{tried}\n"
+        baseline = self.ability_score(m["body"], topics)
+        candidates = []
+        for i in range(n_variants):
+            angle = MUTATION_ANGLES[i % len(MUTATION_ANGLES)]
+            raw = self._complete_safe([{"role": "user", "content": (
+                f"Improve this reusable method. Angle: {angle}.{rej_note}\n"
+                f"Keep it 4-7 short steps, one per line starting with \"- \". "
+                f"Output ONLY the improved method, nothing else.\n\nMethod:\n{m['body']}")}]).strip()
+            lines = [l.strip() for l in raw.splitlines() if l.strip().startswith("-")]
+            if not (3 <= len(lines) <= 8):
+                continue                                     # not a usable method shape
+            body = "\n".join(lines)
+            if body == m["body"].strip():
+                continue
+            candidates.append({"angle": angle, "body": body,
+                               "score": self.ability_score(body, topics)})
+        winner = max(candidates, key=lambda c: c["score"], default=None)
+        improved = bool(winner and winner["score"] > baseline)
+        # losers (and non-improving winners) feed the rejected buffer, capped
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        for c in candidates:
+            if not (improved and c is winner):
+                rejected.append({"body": c["body"], "score": c["score"], "ts": stamp})
+        buf[ability_id] = rejected[-6:]
+        self._save_evolution(buf)
+        return {"id": ability_id, "baseline": baseline, "candidates": candidates,
+                "winner": winner if improved else None}
+
+    def adopt_evolution(self, ability_id, new_body):
+        """Owner-approved adoption of an evolved method (body swap; typing/frontmatter kept)."""
+        return self.update_memory(ability_id, new_body)
 
     # ---- the decision layer: decompose every request, escalate only when it pays ----
     def triage(self, query):

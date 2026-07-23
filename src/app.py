@@ -29,6 +29,7 @@ ICON_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 ICON_CHAT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z"/></svg>'
 ICON_GRAPH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4l4 8.4M17.2 7.4l-4 8.4"/></svg>'
 ICON_INGEST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>'
+ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>'
 ICON_CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
 
 CSS = """
@@ -814,6 +815,65 @@ def main_page():
                     ui.label("Beyne kaydet")
         dlg.open()
 
+    async def evolve_ui():
+        abilities = [m for m in engine.memory_index() if m["type"] == "ability"]
+        if not abilities:
+            ui.notify("Önce bir yetenek öğret (Yetenek öğren).")
+            return
+        with ui.dialog() as dlg, ui.card().classes("dlgcard").style("width:680px;max-width:92vw;gap:8px;padding:22px"):
+            ui.label("Yetenek evrimi").style("font-weight:600;font-size:16px")
+            ui.html('<div class="formsub">AlphaEvolve tarzı, yerel ölçekte: metodun varyantları üretilir, her biri '
+                    'deterministik değerlendiriciyle (parse + yapı + grounding) skorlanır. Kazanan ancak SEN onaylarsan '
+                    'benimsenir; kaybedenler bir daha önerilmemek üzere arşivlenir. Yavaştır (~5-10 dk).</div>')
+            sel = ui.select({m["id"]: m["id"] for m in abilities},
+                            value=abilities[0]["id"]).props("borderless dense dark").classes("glassfield").style("width:100%")
+            box = ui.column().style("width:100%;gap:6px")
+
+            async def run_evo():
+                aid = sel.value
+                note = ui.notification(f"Evrim çalışıyor: {aid} — varyantlar üretilip skorlanıyor…",
+                                       spinner=True, timeout=None)
+                try:
+                    rep = await run.io_bound(engine.evolve_ability, aid)
+                except Exception as ex:
+                    note.dismiss()
+                    ui.notify(f"Evrim başarısız: {ex}", type="negative")
+                    return
+                note.dismiss()
+                if not rep:
+                    ui.notify("Bu id bir yetenek değil.", type="negative")
+                    return
+                box.clear()
+                with box:
+                    ui.label(f'Mevcut metod skoru (baseline): {rep["baseline"]}').style(
+                        "font-size:13px;font-weight:600;color:var(--text)")
+                    for c in rep["candidates"]:
+                        mark = "🏆 " if (rep["winner"] and c is not None and c["body"] == rep["winner"]["body"]) else ""
+                        ui.label(f'{mark}{c["score"]}  ·  {c["angle"]}').style("font-size:12px;color:var(--text-2)")
+                    if rep["winner"]:
+                        ui.html('<div class="formsub" style="color:var(--accent);margin-top:6px">Kazanan metod — onaylarsan benimsenecek</div>')
+                        editor = ui.textarea(value=rep["winner"]["body"]).props("borderless dark autogrow") \
+                            .classes("glassfield").style("width:100%")
+
+                        def adopt():
+                            engine.adopt_evolution(aid, editor.value)
+                            dlg.close()
+                            refresh_current()
+                            ui.notify(f'Evrim benimsendi: {aid}  ({rep["baseline"]} → {rep["winner"]["score"]})')
+
+                        with ui.element("div").classes("newbtn").style("margin:6px 0 0").on("click", adopt):
+                            ui.label("Benimse")
+                    else:
+                        ui.label("Hiçbir varyant baseline'ı geçemedi — mevcut metod kalır (gate ilkesi).").style(
+                            "font-size:12.5px;color:var(--text-3)")
+
+            with ui.row().style("align-self:flex-end;gap:14px;align-items:center;margin-top:4px"):
+                with ui.element("div").classes("savebtn").on("click", dlg.close):
+                    ui.label("Kapat")
+                with ui.element("div").classes("newbtn").style("margin:0").on("click", run_evo):
+                    ui.label("Evrimi başlat")
+        dlg.open()
+
     async def rescore_ui():
         note = ui.notification("Anayasa uygulanıyor: her memory rubrikle puanlanıyor…", spinner=True, timeout=None)
         try:
@@ -953,6 +1013,8 @@ def main_page():
                         ui.label("Konsolidasyon")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", learn_ability_ui):
                         ui.label("Yetenek öğren")
+                    with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", evolve_ui):
+                        ui.label("Yetenek evrimi")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", health_test):
                         ui.label("Sağlık testi")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", rescore_ui):
@@ -1118,6 +1180,12 @@ def main_page():
                         with ui.element("div").classes("sendbtn").on("click", create_src):
                             ui.html(ICON_PLUS)
 
+    # ---------- about: the animated story of how the system works, in-app ----------
+    def build_about_view():
+        with refs["content"]:
+            ui.element("iframe").props('src="/docs/story.html"').style(
+                "flex:1;width:100%;height:100%;border:none;background:#0c0c0f")
+
     # ---------- view switching ----------
     def render_content():
         refs["content"].clear()
@@ -1125,6 +1193,8 @@ def main_page():
             build_chat_view()
         elif refs["view"] == "graph":
             build_graph_view()
+        elif refs["view"] == "about":
+            build_about_view()
         else:
             build_ingest_view()
         for name, el in refs["railbtns"].items():
@@ -1139,7 +1209,7 @@ def main_page():
         with ui.element("div").classes("rail"):
             ui.html(f'<div class="railmark">{ICON_BRAND}</div>')
             refs["railbtns"] = {}
-            for name, icon in (("chat", ICON_CHAT), ("graph", ICON_GRAPH), ("ingest", ICON_INGEST)):
+            for name, icon in (("chat", ICON_CHAT), ("graph", ICON_GRAPH), ("ingest", ICON_INGEST), ("about", ICON_INFO)):
                 btn = ui.element("div").classes("railbtn")
                 with btn:
                     ui.html(icon)
@@ -1151,6 +1221,7 @@ def main_page():
 
 
 if __name__ in {"__main__", "__mp_main__"}:
+    app.add_static_files("/docs", str(Path(__file__).resolve().parent.parent / "docs"))
     app.on_startup(get_engine)
     native = os.getenv("PRAG_NATIVE", "1") != "0"
     ui.run(native=native, port=8080, title="project-rag", window_size=(1200, 780), reload=False)
