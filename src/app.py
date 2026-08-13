@@ -10,7 +10,7 @@ from engine import MemoryEngine, wants_slides
 import chatstore
 import webbrowser
 
-from nicegui import ui, run, app
+from nicegui import events, ui, run, app
 
 _engine = None
 
@@ -34,7 +34,7 @@ ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 
 ICON_CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
 
-CSS = """
+CSS = """<style>
 /* dark dropdowns (q-select popups) — Quasar defaults are white-on-white in our theme */
 .q-menu{ background:#1a1a1f !important; color:#e6e6ea !important; border:1px solid rgba(255,255,255,.12);
   border-radius:12px; box-shadow:0 12px 34px rgba(0,0,0,.55) !important; }
@@ -46,55 +46,50 @@ CSS = """
 .glassfield.q-select, .glassfield.q-input{ min-height:42px; }
 .setlabel{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:#e0906a; font-weight:650; margin:10px 0 4px; }
 .setdiv{ height:1px; background:rgba(255,255,255,.09); margin:12px 0 2px; }
-<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&display=swap');
-:root{ --accent:#e0906a; --accent-2:#c9704e; --text:#ececee; --text-2:rgba(236,236,238,0.60); --text-3:rgba(236,236,238,0.34);
-  --glass:rgba(255,255,255,0.045); --glass-2:rgba(255,255,255,0.08); --stroke:rgba(255,255,255,0.09); --stroke-2:rgba(255,255,255,0.15); }
+:root{ --accent:#e0906a; --accent-strong:#f0a17d; --text:#f2f2f4; --text-2:#b8b8c2; --text-3:#8a8a96;
+  --bg:#0c0c0f; --surface:#17171c; --surface-2:#202027; --stroke:#34343e; --stroke-2:#51515e; --success:#7bd0a0; --danger:#e07b7b;
+  --glass:#17171c; --glass-2:#202027; --ease:cubic-bezier(.2,.8,.2,1); }
 *{ font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif; box-sizing:border-box; }
 html,body,#app,.q-page-container,.q-page,.nicegui-content{ margin:0; background:transparent !important; color:var(--text) !important; }
-body{ background: radial-gradient(1100px 560px at 10% -10%, rgba(224,144,106,0.12), transparent 60%),
-  radial-gradient(900px 520px at 105% 115%, rgba(120,130,255,0.09), transparent 55%), #0c0c0f !important; background-attachment:fixed; }
+body{ background:var(--bg) !important; }
 .nicegui-content{ padding:0 !important; gap:0 !important; }
-::-webkit-scrollbar{ width:8px; height:8px; } ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.12); border-radius:8px; }
-::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,0.22); }
+::-webkit-scrollbar{ width:8px; height:8px; } ::-webkit-scrollbar-thumb{ background:#3d3d47; border-radius:8px; }
+::-webkit-scrollbar-thumb:hover{ background:#575762; }
 .rail{ width:56px; height:100%; display:flex; flex-direction:column; align-items:center; padding:16px 0; gap:6px;
-  background:rgba(255,255,255,0.02); backdrop-filter:blur(30px) saturate(140%); -webkit-backdrop-filter:blur(30px) saturate(140%); border-right:1px solid var(--stroke); }
-.railmark{ width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,var(--accent),var(--accent-2)); display:flex; align-items:center; justify-content:center; margin-bottom:12px; box-shadow:0 4px 16px rgba(224,144,106,0.4); }
+  background:#101015; border-right:1px solid var(--stroke); }
+.railmark{ width:32px; height:32px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
 .railmark svg{ width:17px; height:17px; color:#fff; }
-.railbtn{ width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:var(--text-3); cursor:pointer; transition:all .14s; }
-.railbtn:hover{ background:var(--glass); color:var(--text-2); } .railbtn.on{ background:var(--glass-2); color:var(--accent); } .railbtn svg{ width:20px; height:20px; }
-.side{ width:280px; height:100%; display:flex; flex-direction:column; background:rgba(255,255,255,0.028);
-  backdrop-filter:blur(30px) saturate(140%); -webkit-backdrop-filter:blur(30px) saturate(140%); border-right:1px solid var(--stroke); }
-.newbtn{ margin:16px 16px 8px; padding:11px 14px; border-radius:13px; background:var(--glass-2); border:1px solid var(--stroke-2);
-  color:var(--text); font-size:13.5px; font-weight:500; display:flex; align-items:center; gap:9px; cursor:pointer; transition:all .16s; }
-.newbtn:hover{ background:rgba(255,255,255,0.13); border-color:rgba(255,255,255,0.22); transform:translateY(-1px); } .newbtn svg{ width:15px; height:15px; }
+.railbtn{ width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:var(--text-3); cursor:pointer; transition:background .18s var(--ease),color .18s var(--ease); }
+.railbtn:hover{ background:var(--surface-2); color:var(--text); } .railbtn.on{ background:rgba(224,144,106,.14); color:var(--accent-strong); } .railbtn svg{ width:20px; height:20px; }
+.side{ width:276px; height:100%; display:flex; flex-direction:column; background:#101015; border-right:1px solid var(--stroke); }
+.newbtn{ margin:16px 16px 8px; min-height:40px; padding:10px 14px; border-radius:10px; background:var(--surface-2); border:1px solid var(--stroke);
+  color:var(--text); font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:9px; cursor:pointer; transition:background .18s var(--ease),border-color .18s var(--ease); }
+.newbtn:hover{ background:#2a2a33; border-color:var(--stroke-2); } .newbtn svg{ width:15px; height:15px; }
 .scroll{ flex:1; overflow-y:auto; padding:4px 12px 16px; }
 .sectitle{ color:var(--text-3); font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; margin:14px 8px 7px; }
-.scard{ padding:9px 12px; border-radius:11px; border:1px solid transparent; cursor:pointer; transition:all .14s; margin-bottom:2px; display:flex; align-items:center; gap:9px; }
-.scard:hover{ background:var(--glass); border-color:var(--stroke); } .scard.on{ background:var(--glass); border-color:var(--stroke-2); }
+.scard{ padding:10px 12px; border-radius:8px; border:1px solid transparent; cursor:pointer; transition:background .18s var(--ease); margin-bottom:2px; display:flex; align-items:center; gap:9px; }
+.scard:hover{ background:var(--surface); } .scard.on{ background:var(--surface-2); border-color:var(--stroke); }
 .sdot{ width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; } .sdot.full{ background:var(--text-3); }
 .stitle{ flex:1; min-width:0; font-size:12.5px; color:var(--text); font-weight:450; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.memcard{ padding:9px 12px; border-radius:11px; border:1px solid transparent; cursor:pointer; transition:all .14s; margin-bottom:2px; overflow:hidden; }
+.memcard{ padding:12px 14px; border-radius:9px; border:1px solid var(--stroke); cursor:pointer; transition:background .18s var(--ease),border-color .18s var(--ease); margin-top:8px; overflow:hidden; background:var(--surface); }
 .memcard .memid,.memcard .memsum{ overflow:hidden; text-overflow:ellipsis; }
-.memcard:hover{ background:var(--glass); border-color:var(--stroke); }
+.memcard:hover{ background:var(--surface-2); border-color:var(--stroke-2); }
 .memid{ font-size:12.5px; font-weight:500; color:var(--text); margin-bottom:2px; } .memsum{ font-size:11px; color:var(--text-3); line-height:1.4; }
 .main{ flex:1; height:100%; display:flex; flex-direction:column; min-width:0; }
 /* ---- live pipeline visualisation (replaces the opaque spinner) ---- */
 .wf{ max-width:760px; margin:6px auto 2px; padding:15px 20px 12px; border-radius:16px;
-  background:var(--glass); border:1px solid var(--stroke); backdrop-filter:blur(22px); animation:wfin .45s ease both; }
-@keyframes wfin{ from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none} }
+  background:var(--surface); border:1px solid var(--stroke); }
 .wf-title{ font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-3); margin-bottom:13px; }
 .wf-row{ display:flex; align-items:flex-start; }
 .wf-step{ width:96px; display:flex; flex-direction:column; align-items:center; gap:6px; }
 .wf-dot{ width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
   border:1.5px solid var(--stroke-2); background:rgba(255,255,255,0.03); color:var(--text-3);
   font-size:12.5px; font-weight:600; transition:all .35s; }
-.wf-step.active .wf-dot{ border-color:var(--accent); color:var(--accent); background:rgba(224,144,106,0.10);
-  animation:wfpulse 1.35s ease-out infinite; }
+.wf-step.active .wf-dot{ border-color:var(--accent); color:var(--accent); background:rgba(224,144,106,0.10); }
 .wf-step.done .wf-dot{ border-color:var(--accent); background:var(--accent); color:#fff; transform:scale(1.06); }
 .wf-step.skip .wf-dot{ opacity:.35; border-style:dashed; }
 .wf-step.fail .wf-dot{ border-color:#e07b7b; color:#e07b7b; background:rgba(224,123,123,0.12); }
-@keyframes wfpulse{ 0%{box-shadow:0 0 0 0 rgba(224,144,106,.55)} 70%{box-shadow:0 0 0 13px rgba(224,144,106,0)} 100%{box-shadow:0 0 0 0 rgba(224,144,106,0)} }
 .wf-label{ font-size:11.5px; color:var(--text-3); text-align:center; transition:color .3s; }
 .wf-step.active .wf-label, .wf-step.done .wf-label{ color:var(--text); }
 .wf-detail{ font-size:10px; color:var(--accent); text-align:center; line-height:1.3; min-height:26px;
@@ -110,15 +105,15 @@ body{ background: radial-gradient(1100px 560px at 10% -10%, rgba(224,144,106,0.1
 .bubble-u, .bubble-a{ user-select:text; -webkit-user-select:text; cursor:text; }
 .bubble-u{ background:var(--accent); color:#fff; padding:11px 15px; border-radius:19px 19px 6px 19px; max-width:78%; font-size:14px;
   line-height:1.55; white-space:pre-wrap; word-break:break-word; box-shadow:0 6px 20px rgba(224,144,106,0.28); }
-.bubble-a{ background:var(--glass); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--stroke); color:var(--text);
+.bubble-a{ background:var(--surface); border:1px solid var(--stroke); color:var(--text);
   padding:11px 15px; border-radius:19px 19px 19px 6px; max-width:78%; font-size:14px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
 .welcome{ margin:auto; text-align:center; display:flex; flex-direction:column; align-items:center; gap:13px; padding-top:11vh; }
-.welcome .wm{ width:54px; height:54px; border-radius:17px; background:linear-gradient(135deg,var(--accent),var(--accent-2)); display:flex; align-items:center; justify-content:center; box-shadow:0 12px 38px rgba(224,144,106,0.45); }
+.welcome .wm{ width:54px; height:54px; border-radius:14px; background:var(--accent); display:flex; align-items:center; justify-content:center; }
 .welcome .wm svg{ width:28px; height:28px; color:#fff; } .welcome h2{ font-size:19px; font-weight:600; color:var(--text); margin:0; }
 .welcome p{ font-size:13.5px; color:var(--text-3); margin:0; max-width:330px; line-height:1.5; }
 .inputwrap{ padding:14px 24px 22px; }
-.inputbar{ max-width:760px; margin:0 auto; display:flex; align-items:center; gap:8px; background:var(--glass-2);
-  backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); border:1px solid var(--stroke-2);
+.inputbar{ max-width:760px; margin:0 auto; display:flex; align-items:center; gap:8px; background:var(--surface-2);
+  border:1px solid var(--stroke-2);
   border-radius:18px; padding:6px 8px; box-shadow:0 10px 34px rgba(0,0,0,0.34); }
 .inputbar .q-field, .inputbar .q-field__control, .inputbar .q-field__control::before, .inputbar .q-field__control::after{ background:transparent !important; box-shadow:none !important; border:none !important; }
 .inputbar .q-field__control{ padding:0 8px !important; min-height:38px !important; } .inputbar .q-field__native{ color:var(--text) !important; font-size:14px !important; }
@@ -137,7 +132,7 @@ body{ background: radial-gradient(1100px 560px at 10% -10%, rgba(224,144,106,0.1
 .primarybtn{ margin-top:6px; padding:12px 18px; border-radius:14px; background:var(--accent); color:#fff; font-weight:500; font-size:14px;
   display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; transition:all .15s; box-shadow:0 8px 24px rgba(224,144,106,0.4); }
 .primarybtn:hover{ filter:brightness(1.08); transform:translateY(-1px); } .primarybtn svg{ width:16px; height:16px; }
-.q-dialog .dlgcard{ background:rgba(22,22,26,0.86) !important; backdrop-filter:blur(34px) saturate(140%); -webkit-backdrop-filter:blur(34px) saturate(140%);
+.q-dialog .dlgcard{ background:var(--surface) !important;
   border:1px solid var(--stroke-2) !important; border-radius:18px !important; color:var(--text) !important; }
 .spin{ width:34px; height:20px; display:flex; align-items:center; gap:5px; padding-left:4px; }
 .spin i{ width:7px; height:7px; border-radius:50%; background:var(--text-3); animation:bp 1.2s infinite ease-in-out; }
@@ -150,6 +145,24 @@ body{ background: radial-gradient(1100px 560px at 10% -10%, rgba(224,144,106,0.1
 .deepbtn:hover{ background:var(--glass); color:var(--text-2); }
 .deepbtn.on{ background:rgba(224,144,106,0.14); border-color:var(--stroke-2); color:var(--accent); }
 .attchip{ display:flex; gap:7px; align-items:center; padding:5px 11px; border-radius:11px; background:var(--glass); border:1px solid var(--stroke); font-size:11.5px; color:var(--text-2); }
+.viewhead{ display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding:6px 0 18px; border-bottom:1px solid var(--stroke); }
+.viewhead h1{ margin:0; font-size:22px; line-height:1.2; letter-spacing:-.025em; font-weight:650; text-wrap:balance; }
+.viewhead p{ margin:6px 0 0; max-width:62ch; color:var(--text-2); font-size:13.5px; line-height:1.55; }
+.localpill{ flex:none; color:var(--success); border:1px solid rgba(123,208,160,.32); background:rgba(123,208,160,.08); border-radius:999px; padding:6px 9px; font-size:11px; font-weight:600; }
+.source-section{ padding:20px 0 4px; }
+.source-section h2{ margin:0 0 5px; font-size:14px; font-weight:650; color:var(--text); }
+.source-section p{ margin:0 0 12px; color:var(--text-2); font-size:12.5px; line-height:1.5; }
+.dropzone{ position:relative; min-height:156px; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; border:1px dashed #686875; border-radius:12px; background:#131318; color:var(--text-2); text-align:center; transition:border-color .18s var(--ease),background .18s var(--ease); }
+.dropzone:hover,.dropzone:focus-within{ border-color:var(--accent); background:#1a181b; }
+.dropzone strong{ color:var(--text); font-size:14px; font-weight:600; }.dropzone span{ font-size:12px; color:var(--text-2); }.dropzone .q-uploader{ position:absolute; inset:0; width:100%; opacity:0; cursor:pointer; }.dropzone .q-uploader__header,.dropzone .q-uploader__list{ display:none !important; }
+.projectbar{ display:flex; align-items:center; gap:8px; padding:8px; border:1px solid var(--stroke); border-radius:10px; background:var(--surface); }.projectbar .q-field{ flex:1; min-width:0; }.projectbar .q-field__control,.projectbar .q-field__control:before,.projectbar .q-field__control:after{ border:none!important;box-shadow:none!important;background:transparent!important; }
+.inline-action{ min-height:36px; padding:8px 12px; border:0; border-radius:8px; background:var(--accent); color:#1a1110; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; transition:filter .18s var(--ease); }.inline-action:hover{ filter:brightness(1.08); }
+.pastebar{ display:flex; align-items:center; gap:8px; padding:8px 0 2px; }.pastebar .q-field{ flex:1; }.pastebar .q-field__control,.pastebar .q-field__control:before,.pastebar .q-field__control:after{ border:none!important;box-shadow:none!important;background:transparent!important; }.pastebar .q-field__native{ color:var(--text)!important;font-size:13.5px!important; }
+.empty-sources{ padding:18px 0 4px; color:var(--text-2); font-size:13px; }
+.q-field--focused .q-field__control{ outline:2px solid rgba(224,144,106,.75); outline-offset:2px; border-radius:8px; }
+.railbtn:focus-visible,.newbtn:focus-visible,.sendbtn:focus-visible,.clipbtn:focus-visible,.savebtn:focus-visible,.inline-action:focus-visible,.memcard:focus-visible,.scard:focus-visible{ outline:2px solid var(--accent-strong); outline-offset:2px; }
+@media (max-width:760px){ .side{ display:none; }.rail{ width:52px; }.chatinner,.formwrap{ padding-left:18px;padding-right:18px; }.inputwrap{ padding-left:18px;padding-right:18px; }.viewhead{ align-items:flex-start;flex-direction:column;gap:10px; }.localpill{ align-self:flex-start; }.projectbar{ flex-wrap:wrap; }.projectbar .q-field{ flex-basis:100%; }.memcard{ margin-top:8px; }.dropzone{ min-height:142px; } }
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{ animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important; } }
 </style>
 """
 
@@ -176,16 +189,20 @@ def extract_text_from_path(path):
     p = Path(path.strip().strip('"'))
     if not p.is_file():
         raise FileNotFoundError(f"Not a file: {p}")
-    data = p.read_bytes()
-    suffix = p.suffix.lower()
+    return p.name, extract_text_from_bytes(p.name, p.read_bytes())
+
+
+def extract_text_from_bytes(name, data):
+    """Extract text from a browser-uploaded document without writing it to disk."""
+    suffix = Path(name).suffix.lower()
     if suffix == ".pdf":
         from io import BytesIO
         from pypdf import PdfReader
-        return p.name, "\n".join((page.extract_text() or "") for page in PdfReader(BytesIO(data)).pages)
+        return "\n".join((page.extract_text() or "") for page in PdfReader(BytesIO(data)).pages)
     if suffix == ".docx":
-        return p.name, _docx_text(data)
+        return _docx_text(data)
     if suffix in (".txt", ".md", ".markdown"):
-        return p.name, data.decode("utf-8", errors="ignore")
+        return data.decode("utf-8", errors="ignore")
     raise ValueError(f"Unsupported file type '{suffix}' - use .pdf, .docx, .txt or .md")
 
 
@@ -1226,9 +1243,24 @@ def main_page():
         async def create_src():
             text = (refs["ragbox"].value or "").strip()
             if not text:
+                ui.notify("Yapıştırılacak bir not veya kaynak açıklaması yaz.", type="warning")
                 return
             refs["ragbox"].value = ""
             await ingest_text(text)
+
+        async def receive_upload(e: events.UploadEventArguments):
+            """Process a dropped document in memory, then use the normal approval flow."""
+            name = e.file.name
+            try:
+                text = extract_text_from_bytes(name, await e.file.read())
+            except Exception as ex:
+                ui.notify(f"Dosya okunamadı: {ex}", type="negative")
+                return
+            if not text.strip():
+                ui.notify("Dosyada okunabilir metin bulunamadı.", type="warning")
+                return
+            ui.notify(f"{name} okundu — hafıza özeti hazırlanıyor…", type="positive")
+            await ingest_text(text, Path(name).stem)
 
         def open_rag_upload():
             with ui.dialog() as dlg, ui.card().classes("dlgcard").style("min-width:540px;gap:10px;padding:22px"):
@@ -1311,30 +1343,36 @@ def main_page():
             with ui.element("div").classes("main"):
                 with ui.scroll_area().classes("flex-grow w-full"):
                     with ui.element("div").classes("chatinner"):
-                        ui.html('<div class="formtitle">RAG Sources</div>')
-                        ui.html('<div class="formsub">Your RAG knowledge. Click any to view / edit / delete. Add one below.</div>')
-                        ui.html('<div class="formsub" style="margin-top:14px;color:var(--accent)">Analyze a whole project folder — AI reads it and writes structured memory</div>')
-                        with ui.element("div").classes("inputbar").style("margin:6px 0 4px"):
-                            refs["projpath"] = ui.input(placeholder="Project folder path (e.g. D:\\meld)").props("borderless dense dark").classes("flex-grow").on("keydown.enter", analyze_proj)
-                            refs["projname"] = ui.input(placeholder="name").props("borderless dense dark").style("width:110px")
-                            with ui.element("div").classes("newbtn").style("margin:0").on("click", analyze_proj):
-                                ui.label("Analyze")
+                        ui.html('<div class="viewhead"><div><h1>RAG kaynakları</h1><p>Dosya, not veya proje ekle. Her kaynak kalıcı hafızaya yazılmadan önce senin onayına gelir.</p></div><div class="localpill">● yalnızca yerel</div></div>')
+                        with ui.element("div").classes("source-section"):
+                            ui.html('<h2>Dosya ekle</h2><p>PDF, DOCX, TXT veya Markdown dosyasını buraya bırak; özetini görüp sonra kaydet.</p>')
+                            with ui.element("div").classes("dropzone"):
+                                ui.html(f'<div style="color:var(--accent)">{ICON_CLIP}</div>')
+                                ui.html('<strong>Dosyayı sürükleyip bırak</strong><span>veya seçmek için tıkla · PDF, DOCX, TXT, MD</span>')
+                                ui.upload(on_upload=receive_upload, auto_upload=True, max_file_size=12_000_000,
+                                          max_files=1).props('accept=".pdf,.docx,.txt,.md,.markdown"').classes('w-full h-full')
+                        with ui.element("div").classes("source-section"):
+                            ui.html('<h2>Projeyi analiz et</h2><p>Klasörü tarar; mimari, teknoloji ve eksik noktalar için düzenlenebilir bellek taslağı oluşturur.</p>')
+                            with ui.element("div").classes("projectbar"):
+                                refs["projpath"] = ui.input(placeholder="Proje klasörü yolu · D:\\meld").props("borderless dense dark").on("keydown.enter", analyze_proj)
+                                refs["projname"] = ui.input(placeholder="Kısa ad (isteğe bağlı)").props("borderless dense dark")
+                                ui.button("Analiz et", on_click=analyze_proj).classes("inline-action")
                         srcs = [m for m in engine.memory_index() if m["branch"] == "sources"]
+                        ui.html('<div class="source-section"><h2>Kaydedilmiş kaynaklar</h2><p>Bir kaynağa tıklayıp içeriğini, bağlantılarını ve retrieval patikalarını düzenleyebilirsin.</p></div>')
                         if not srcs:
-                            ui.html('<div class="capnote" style="margin-top:26px">No sources yet — add one below.</div>')
+                            ui.html('<div class="empty-sources">Henüz kaynak yok. Bir dosya bırak veya kısa bir notla başla.</div>')
                         for m in srcs:
-                            card = ui.element("div").classes("memcard").style("margin-top:6px")
+                            card = ui.element("div").classes("memcard")
                             with card:
                                 ui.html(f'<div class="memid">{m["id"]}  ·  {m["type"]}</div>')
                                 ui.html(f'<div class="memsum">{m["summary"]}</div>')
                             card.on("click", lambda e, mm=m: open_memory(mm))
                 with ui.element("div").classes("inputwrap"):
-                    with ui.element("div").classes("inputbar"):
+                    with ui.element("div").classes("pastebar").style("max-width:760px;margin:0 auto"):
                         with ui.element("div").classes("clipbtn").on("click", open_rag_upload):
                             ui.html(ICON_CLIP)
-                        refs["ragbox"] = ui.input(placeholder="Paste or describe a new source...").props("borderless dense dark").classes("flex-grow").on("keydown.enter", create_src)
-                        with ui.element("div").classes("sendbtn").on("click", create_src):
-                            ui.html(ICON_PLUS)
+                        refs["ragbox"] = ui.input(placeholder="Kısa bir not yapıştır veya kaynağı tarif et…").props("borderless dense dark").on("keydown.enter", create_src)
+                        ui.button("Taslak oluştur", on_click=create_src).classes("inline-action")
 
     # ---------- settings: choose an already downloaded local Foundry model ----------
     def settings_ui():
