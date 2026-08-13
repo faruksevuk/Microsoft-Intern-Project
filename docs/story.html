@@ -355,10 +355,10 @@ footer a{color:var(--accent);text-decoration:none}
 <!-- ═══════════════ PROVENANCE ═══════════════ -->
 <section>
   <div class="eyebrow reveal">08 · provenance</div>
-  <h2 class="reveal">what we borrowed, what we changed, what's ours</h2>
+  <h2 class="reveal">what we borrowed and how we adapted it</h2>
   <p class="reveal" style="margin-top:.8rem">Nothing here pretends to be invented in a vacuum. Each borrowed idea is
   named, its adaptation to a <i>frozen 4B model on 4GB, fully offline</i> is stated, and the receipt is linked.
-  <span class="tag b">borrowed</span> = adapted from a cited system · <span class="tag o">original</span> = grew out of this project's own constraints.</p>
+  <span class="tag b">borrowed</span> = adapted from a cited system · <span class="tag o">in-project</span> = a combination or implementation developed for this project's constraints, not a claim of a new foundational algorithm.</p>
 
   <div class="tblwrap reveal">
     <table class="ptbl">
@@ -393,36 +393,36 @@ footer a{color:var(--accent);text-decoration:none}
         <td>post-ranking query-focused compression (can't touch hit@1 by construction) + verbatim working memory instead of lossy summaries</td>
         <td><code>engine._compact_body()</code> · session recall</td>
         <td>context 100%→46%, hit@1 unchanged</td></tr>
-      <tr><td><span class="tag o">original</span>desire paths</td>
-        <td>this project</td>
+      <tr><td><span class="tag o">in-project</span>desire paths</td>
+        <td>adapted combination</td>
         <td>findability itself learns: cited memories earn the query as a trace; traces feed BOTH dense and lexical ranking, gated by similarity (convergent with jcode's access-counting, independently built)</td>
         <td><code>engine._wear_paths()</code> · <code>_dense_score()</code></td>
         <td>drift queries 2/7 → 6/7</td></tr>
-      <tr><td><span class="tag o">original</span>three-way abstention</td>
-        <td>this project</td>
+      <tr><td><span class="tag o">in-project</span>three-way abstention</td>
+        <td>adapted combination</td>
         <td>relevance gate distinguishes memory-grounded / general-knowledge (tagged) / personal-gap ("not in my memory") — no fabricated personal facts</td>
         <td><code>engine._select_memories()</code> + system prompt</td>
         <td>off-topic query retrieves 0, answers honestly</td></tr>
-      <tr><td><span class="tag o">original</span>band-clamped self-tuning</td>
-        <td>this project</td>
+      <tr><td><span class="tag o">in-project</span>band-clamped self-tuning</td>
+        <td>adapted combination</td>
         <td>the retrieval reflex (rel_floor) learns from citation feedback, but only inside an owner-set constitutional envelope, evidence-gated, one step at a time — "self-tuning with rules of its own"</td>
         <td><code>engine.tune_policy()</code> · <code>rules/scoring.md</code></td>
         <td>k 7.0→3.8, hit@1 flat; runaway clamped at band edge</td></tr>
-      <tr><td><span class="tag o">original</span>constitution as machine-read memory</td>
-        <td>this project</td>
+      <tr><td><span class="tag o">in-project</span>constitution as machine-read memory</td>
+        <td>project implementation</td>
         <td>scoring bands, path thresholds and the retrieval envelope live in a markdown file the engine parses — the owner edits governance in plain text, git shows its evolution</td>
         <td><code>rules/scoring.md</code> · <code>engine._load_rules()</code></td>
         <td>all policy params load from the file</td></tr>
-      <tr><td><span class="tag o">original</span>data vs ability split</td>
-        <td>this project</td>
+      <tr><td><span class="tag o">in-project</span>data vs ability split</td>
+        <td>project implementation</td>
         <td>volatile facts (a price) are fetched fresh and never persisted; reusable <i>methods</i> are distilled, persisted, evolved, and applied to fresh data — procedural vs declarative memory</td>
         <td><code>engine.acquire_ability()</code> / <code>apply_ability()</code></td>
         <td>distilled method dropped one-off specifics unprompted</td></tr>
     </table>
   </div>
-  <div class="callout reveal">The combination is the contribution: gate <i>(SkillOpt)</i> guarding evolution
-  <i>(AlphaEvolve)</i> over abilities <i>(ours)</i> retrieved by a policy that tunes itself <i>(ours)</i> inside a
-  constitution the owner writes <i>(ours)</i> — all on hardware none of the cited systems target.</div>
+  <div class="callout reveal">The project contribution is the evaluated integration: a SkillOpt-inspired gate
+  guarding AlphaEvolve-inspired method search, alongside retrieval traces and constrained tuning, on a small local model.
+  It is an engineering research prototype, not a claim of a new foundational algorithm.</div>
 </section>
 
 <!-- ═══════════════ REFERENCES ═══════════════ -->

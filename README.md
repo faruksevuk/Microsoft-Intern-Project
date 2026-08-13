@@ -4,6 +4,8 @@ A fully-local second brain that learns from being used. No cloud, no API keys, n
 
 Built during the Microsoft summer school project *"Local RAG AI Assistant with Foundry Local"*, then taken considerably further.
 
+> **Positioning:** a local-first RAG research prototype exploring safe adaptation around small models: learned retrieval traces, constrained policy tuning, and fail-closed validation gates. It adapts and evaluates existing ideas for this setting; it does not claim a new foundational algorithm.
+
 📖 **[the story](docs/story.html)** — an animated walkthrough of how the system works, what was borrowed from [SkillOpt](https://arxiv.org/abs/2605.23904)/[AlphaEvolve](https://arxiv.org/abs/2506.13131)/[jcode](https://github.com/1jehuang/jcode) and what changed, with per-claim proof links. Also available in-app (the ⓘ tab).
 
 ## the idea
