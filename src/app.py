@@ -430,7 +430,7 @@ def main_page():
                 with ui.element("div").classes("inputbar"):
                     with ui.element("div").classes("clipbtn").on("click", open_attach):
                         ui.html(ICON_CLIP)
-                    refs["inp"] = ui.input(placeholder="Sor, ya da 🔎 ile internette araştır...").props("borderless dense dark").classes("flex-grow").on("keydown.enter", send)
+                    refs["inp"] = ui.input(placeholder="Sor veya internette araştır.").props("borderless dense dark").classes("flex-grow").on("keydown.enter", send)
                     # derin mod: her adımı doğrulanan derleyici modu (yavaş ama daha sağlam)
                     deep_btn = ui.element("div").classes(f'deepbtn{" on" if refs["deep"] else ""}')
                     with deep_btn:
@@ -501,7 +501,7 @@ def main_page():
         with refs["chatcol"]:
             with ui.element("div").classes("row-a"):
                 with ui.element("div").classes("bubble-a").style("width:100%"):
-                    ui.label(f'📊  {deck["title"]}').style("font-weight:600;font-size:14.5px")
+                    ui.label(deck["title"]).style("font-weight:600;font-size:14.5px")
                     if deck.get("subtitle"):
                         ui.label(deck["subtitle"]).style("font-size:12px;color:var(--text-3);margin-top:2px")
                     ui.label(f'{len(deck["slides"])} slayt · hafızandan üretildi').style(
@@ -550,7 +550,7 @@ def main_page():
         if detail:
             r["detail"].text = detail
         if status in ("done", "skip"):
-            r["num"].text = "✓" if status == "done" else "–"
+            r["num"].text = "OK" if status == "done" else "-"
             conn = wf.get(f"conn{r['idx']}")
             if conn:
                 conn.classes(add="on")
@@ -772,7 +772,7 @@ def main_page():
             with ui.scroll_area().style("max-height:46vh"):
                 for e in rep["results"]:
                     color = "var(--text-2)" if e["found"] else "#e0b06a"
-                    mark = "✓" if e["found"] else "✗"
+                    mark = "Bulundu" if e["found"] else "Bulunamadı"
                     ui.label(f'{mark}  {e["id"]}  ·  sıra {e["rank"]}').style(f"font-size:12.5px;color:{color}")
                 if lost:
                     ui.html('<div class="formsub" style="margin-top:10px;color:#e0b06a">Kayıp düğümler - onarım soruları ("/" ile ayrılır; düzenle, onayla)</div>')
@@ -999,7 +999,7 @@ def main_page():
                     ui.label(f'Mevcut metod skoru (baseline): {rep["baseline"]}').style(
                         "font-size:13px;font-weight:600;color:var(--text)")
                     for c in rep["candidates"]:
-                        mark = "🏆 " if (rep["winner"] and c is not None and c["body"] == rep["winner"]["body"]) else ""
+                        mark = "Kazanan: " if (rep["winner"] and c is not None and c["body"] == rep["winner"]["body"]) else ""
                         ui.label(f'{mark}{c["score"]}  ·  {c["angle"]}').style("font-size:12px;color:var(--text-2)")
                     if rep["winner"]:
                         ui.html('<div class="formsub" style="color:var(--accent);margin-top:6px">Kazanan metod — onaylarsan benimsenecek</div>')
@@ -1343,7 +1343,7 @@ def main_page():
             with ui.element("div").classes("main"):
                 with ui.scroll_area().classes("flex-grow w-full"):
                     with ui.element("div").classes("chatinner"):
-                        ui.html('<div class="viewhead"><div><h1>RAG kaynakları</h1><p>Dosya, not veya proje ekle. Her kaynak kalıcı hafızaya yazılmadan önce senin onayına gelir.</p></div><div class="localpill">● yalnızca yerel</div></div>')
+                        ui.html('<div class="viewhead"><div><h1>RAG kaynakları</h1><p>Dosya, not veya proje ekle. Her kaynak kalıcı hafızaya yazılmadan önce senin onayına gelir.</p></div><div class="localpill">Yalnızca yerel</div></div>')
                         with ui.element("div").classes("source-section"):
                             ui.html('<h2>Dosya ekle</h2><p>PDF, DOCX, TXT veya Markdown dosyasını buraya bırak; özetini görüp sonra kaydet.</p>')
                             with ui.element("div").classes("dropzone"):
