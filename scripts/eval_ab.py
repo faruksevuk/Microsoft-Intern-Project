@@ -7,15 +7,15 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, r"D:\project-rag\src")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+import engine as eng
+from config import Config
+from engine import MemoryEngine, cosine
 
 SCRATCH = Path(__file__).parent / "abeval"
-REAL_MEM = Path(r"D:\project-rag\memory")
+REAL_MEM = Config().memory_dir
 PDF = Path(r"D:\repos\Microsoft-ss\Summer School Foundry Local Plan.pdf")
-
-import store
-import engine as eng
-from engine import MemoryEngine, cosine
 
 # ---------- corpora ----------
 def make_corpus(name, expanded):
@@ -46,10 +46,9 @@ def make_corpus(name, expanded):
 
 
 def point_engine_at(e, dst):
-    store.MEMORY_DIR = dst
-    eng.MEMORY_DIR = dst
-    eng.RULES_PATH = dst / "rules" / "scoring.md"
-    eng.CACHE_PATH = SCRATCH / "cache.json"
+    """Re-aim a live engine at another corpus copy (shared embedding cache, so the
+    variants are compared without paying for re-embedding)."""
+    e.cfg = Config(root=SCRATCH, memory_dir=dst, cache_dir=SCRATCH)
     e._cache = e._load_cache()
     e.reload_memories()
 
@@ -67,7 +66,9 @@ QS = [
     ("What design patterns appear in the foundry-rag codebase?", {"foundry-rag-20260716-174356-design-patterns"}),
     ("What is the core idea behind the foundry-rag project?", {"foundry-rag-20260716-174356-idea", "foundry-rag-20260716-174356"}),
     ("What is still missing or TODO in foundry-rag?", {"foundry-rag-20260716-174356-missings-todos"}),
-    ("Is SQLite used anywhere in the stack?", {"foundry-rag-20260716-174356-tech-stack", "foundry-rag-20260716-174356-architecture"}),
+    # was "Is SQLite used anywhere in the stack?" — the brain's SQLite claim was false
+    # and has been corrected; the retrieval target (tech-stack) is unchanged
+    ("What does the stack run on and how are memories stored?", {"foundry-rag-20260716-174356-tech-stack", "foundry-rag-20260716-174356-architecture"}),
     ("If I forget where the base project folder is, which note points to it?", {"foundry-rag-20260716-174356-pointer", "foundry-rag-20260716-174356"}),
 ]
 QS_PDF = [
@@ -134,12 +135,7 @@ def table(rows, title):
 SCRATCH.mkdir(exist_ok=True)
 print("loading models once...", flush=True)
 real = make_corpus("real", expanded=False)
-e = None
-store.MEMORY_DIR = real
-eng.MEMORY_DIR = real
-eng.RULES_PATH = real / "rules" / "scoring.md"
-eng.CACHE_PATH = SCRATCH / "cache.json"
-e = MemoryEngine()
+e = MemoryEngine(config=Config(root=SCRATCH, memory_dir=real, cache_dir=SCRATCH))
 
 rows = [
     run_system("S0-standard", real, e, QS, "s0"),

@@ -18,17 +18,17 @@ EPS = 1e-9
 
 @dataclass(frozen=True)
 class GateResult:
-    action: str          # "accept" | "reject" | "ungated"
+    action: str          # "accept" | "reject" | "blocked"
     label: str
     before: float
     after: float
 
     def __bool__(self):
-        return self.action != "reject"
+        return self.action == "accept"
 
     def summary(self):
-        if self.action == "ungated":
-            return f"{self.label}: ungated (no held-out tasks)"
+        if self.action == "blocked":
+            return f"{self.label}: BLOCKED (no curated held-out tasks)"
         arrow = f"{self.before:.3f} -> {self.after:.3f}"
         return f"{self.label}: {self.action.upper()} ({arrow})"
 
@@ -43,9 +43,9 @@ def decide(label, before, after):
 def load_tasks(path, memories=None):
     """Held-out retrieval tasks: [{"q": ..., "expect": [memory-id, ...]}].
 
-    Auto-seeded from the corpus on first use (each memory's own summary as the probe)
-    so the gate works out of the box; the owner is meant to curate/extend this file
-    with real questions - the more realistic the tasks, the stronger the guarantee.
+    This file is deliberately *not* auto-seeded and is never changed by live usage.
+    A gate is only held out when its questions were not used to tune the system. Keep
+    a curated, versioned file here; live queries belong in online monitoring instead.
     """
     p = Path(path)
     if p.exists():
@@ -55,16 +55,4 @@ def load_tasks(path, memories=None):
                 return data
         except Exception:
             pass
-    tasks = []
-    for m in (memories or []):
-        summary = (m["meta"].get("summary") or "").strip()
-        mid = m["meta"].get("id")
-        if mid and len(summary) > 12:
-            tasks.append({"q": summary, "expect": [mid]})
-    if tasks:
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(tasks, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError:
-            pass
-    return tasks
+    return []

@@ -30,9 +30,22 @@ ICON_CHAT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 ICON_GRAPH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4l4 8.4M17.2 7.4l-4 8.4"/></svg>'
 ICON_INGEST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>'
 ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>'
+ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.01a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>'
+
 ICON_CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
 
 CSS = """
+/* dark dropdowns (q-select popups) — Quasar defaults are white-on-white in our theme */
+.q-menu{ background:#1a1a1f !important; color:#e6e6ea !important; border:1px solid rgba(255,255,255,.12);
+  border-radius:12px; box-shadow:0 12px 34px rgba(0,0,0,.55) !important; }
+.q-menu .q-item{ color:#e6e6ea !important; font-size:13px; min-height:36px; }
+.q-menu .q-item:hover, .q-menu .q-item--active{ background:rgba(255,255,255,.07) !important; color:#e0906a !important; }
+.glassfield .q-field__native, .glassfield .q-select__selected, .glassfield input{ color:#f2f2f4 !important; font-size:13.5px !important; }
+.glassfield .q-select__dropdown-icon, .glassfield .q-field__marginal{ color:#8a8a92 !important; }
+.glassfield .q-field__label{ color:#8a8a92 !important; font-size:12px !important; }
+.glassfield.q-select, .glassfield.q-input{ min-height:42px; }
+.setlabel{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:#e0906a; font-weight:650; margin:10px 0 4px; }
+.setdiv{ height:1px; background:rgba(255,255,255,.09); margin:12px 0 2px; }
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&display=swap');
 :root{ --accent:#e0906a; --accent-2:#c9704e; --text:#ececee; --text-2:rgba(236,236,238,0.60); --text-3:rgba(236,236,238,0.34);
@@ -132,12 +145,16 @@ body{ background: radial-gradient(1100px 560px at 10% -10%, rgba(224,144,106,0.1
 @keyframes bp{ 0%,60%,100%{ transform:translateY(0); opacity:.4 } 30%{ transform:translateY(-5px); opacity:1 } }
 .clipbtn{ width:34px; height:34px; min-width:34px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:var(--text-3); cursor:pointer; transition:all .14s; }
 .clipbtn:hover{ background:var(--glass); color:var(--accent); } .clipbtn svg{ width:16px; height:16px; }
+.deepbtn{ padding:0 10px; height:30px; border-radius:10px; display:flex; align-items:center; font-size:11.5px; font-weight:500;
+  color:var(--text-3); border:1px solid transparent; cursor:pointer; transition:all .14s; white-space:nowrap; }
+.deepbtn:hover{ background:var(--glass); color:var(--text-2); }
+.deepbtn.on{ background:rgba(224,144,106,0.14); border-color:var(--stroke-2); color:var(--accent); }
 .attchip{ display:flex; gap:7px; align-items:center; padding:5px 11px; border-radius:11px; background:var(--glass); border:1px solid var(--stroke); font-size:11.5px; color:var(--text-2); }
 </style>
 """
 
-BRANCH_ORDER = ["owner", "sources", "learnings", "past-chats", "rules"]
-GRAPH_COLORS = ["#8b7bff", "#e0906a", "#7bd0a0", "#e07b9a", "#7ba7d0"]
+BRANCH_ORDER = ["owner", "sources", "learnings", "past-chats", "rules", "reference"]
+GRAPH_COLORS = ["#8b7bff", "#e0906a", "#7bd0a0", "#e07b9a", "#7ba7d0", "#6a9fe0"]
 
 
 def _docx_text(data):
@@ -189,7 +206,7 @@ def main_page():
     ui.add_head_html(CSS)
     ui.dark_mode(value=True)
     engine = get_engine()
-    refs = {"welcome": True, "view": "chat"}
+    refs = {"welcome": True, "view": "chat", "deep": False}
 
     engine.set_session(chatstore.new_session())  # every launch starts fresh
 
@@ -340,6 +357,9 @@ def main_page():
             return
         refs["inp"].value = ""
         add_bubble(q, True)
+        await research_flow(q)
+
+    async def research_flow(q):
         wf = build_workflow(RESEARCH_STEPS, "internette araştırma")
         pq, DONE = Queue(), object()
         out = {"res": None, "err": None}
@@ -394,12 +414,23 @@ def main_page():
                     with ui.element("div").classes("clipbtn").on("click", open_attach):
                         ui.html(ICON_CLIP)
                     refs["inp"] = ui.input(placeholder="Sor, ya da 🔎 ile internette araştır...").props("borderless dense dark").classes("flex-grow").on("keydown.enter", send)
+                    # derin mod: her adımı doğrulanan derleyici modu (yavaş ama daha sağlam)
+                    deep_btn = ui.element("div").classes(f'deepbtn{" on" if refs["deep"] else ""}')
+                    with deep_btn:
+                        ui.label("derin")
+                    deep_btn.on("click", toggle_deep)
                     with ui.element("div").classes("savebtn").on("click", save_chat):
                         ui.label("Save")
                     with ui.element("div").classes("savebtn").style("padding:0 10px").on("click", do_research):
                         ui.html(ICON_SEARCH)
                     with ui.element("div").classes("sendbtn").on("click", send):
                         ui.html(ICON_SEND)
+
+    def toggle_deep():
+        refs["deep"] = not refs["deep"]
+        rebuild_input()
+        ui.notify("Derin mod açık — her adım doğrulanır, yanıt yavaşlar."
+                  if refs["deep"] else "Derin mod kapalı.")
 
     def remove_attachment(idx):
         atts = engine.session.get("attachments") or []
@@ -548,8 +579,39 @@ def main_page():
             return
         refs["inp"].value = ""
         add_bubble(q, True)
-        if wants_slides(q):                 # rule-based tool routing (not the weak model's call)
+        # routing: explicit rules keep clear cases; the model reasons over the middle
+        # ground and its proposal passes deterministic gates (engine.decide_action)
+        decision = await run.io_bound(engine.decide_action, q)
+        if decision.get("source") == "model" and decision.get("why"):
+            ui.notify(f'yönlendirme (model): {decision["action"]} · {decision["why"]}')
+        if decision["action"] == "slides":
             await make_deck(q)
+            return
+        if decision["action"] == "research":
+            await research_flow(decision.get("arg") or q)
+            return
+        if refs["deep"]:
+            # compiler mode: no streaming (the answer only exists after every step is
+            # verified and the integration itself passes the grounding check)
+            note = ui.notification("Derin mod: adımlara ayrılıyor ve her adım doğrulanıyor…",
+                                   spinner=True, timeout=None)
+            trace = []
+            try:
+                ans = await run.io_bound(engine.answer_compiled, q, 3, trace, True)
+            except Exception as ex:
+                note.dismiss()
+                ui.notify(f"Derin mod başarısız: {ex}", type="negative")
+                return
+            note.dismiss()
+            steps = next((v for k, v in trace if k == "steps"), [])
+            ok = sum(1 for _, why in steps if why == "verified")
+            add_bubble(ans or "Doğrulanmış bir adım üretemedim.", False)
+            if steps:
+                ui.notify(f"{ok}/{len(steps)} adım doğrulandı")
+            chatstore.save_session(engine.session)
+            render_sidebar()
+            if engine.session_full():
+                rebuild_input()
             return
         with refs["chatcol"]:
             with ui.element("div").classes("row-a"):
@@ -742,9 +804,24 @@ def main_page():
                 else:
                     ui.html('<div class="formsub" style="margin-top:6px">Onarım gerekmedi — her düğüm bulunabilir.</div>')
                 if rep["conflicts"]:
-                    ui.html('<div class="formsub" style="margin-top:10px;color:#e0b06a">Olası çelişki / tekrar (owner uzlaştırmalı)</div>')
+                    ui.html('<div class="formsub" style="margin-top:10px;color:#e0b06a">Olası çelişki / tekrar — hangisi kalsın? (kaybeden arşive gider)</div>')
                     for c in rep["conflicts"]:
-                        ui.label(f'  {c["a"]}  ↔  {c["b"]}   (benzerlik {c["sim"]})').style("font-size:12px;color:var(--text-2)")
+                        with ui.row().style("gap:10px;align-items:center;flex-wrap:nowrap;width:100%"):
+                            ui.label(f'{c["a"]}  ↔  {c["b"]}  ({c["sim"]})').style(
+                                "font-size:12px;color:var(--text-2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis")
+
+                            def _resolve(keep, lose):
+                                ok = engine.resolve_conflict(keep, lose)
+                                ui.notify(f"{keep} kaldı, {lose} arşivlendi" if ok else "çözülemedi",
+                                          type=("positive" if ok else "negative"))
+                                refresh_current()
+
+                            with ui.element("div").classes("savebtn").style("padding:4px 10px;font-size:11px") \
+                                    .on("click", lambda e, a=c["a"], b=c["b"]: _resolve(a, b)):
+                                ui.label("A kalsın")
+                            with ui.element("div").classes("savebtn").style("padding:4px 10px;font-size:11px") \
+                                    .on("click", lambda e, a=c["a"], b=c["b"]: _resolve(b, a)):
+                                ui.label("B kalsın")
                 if rep["prunable"]:
                     ui.html('<div class="formsub" style="margin-top:10px">Budama adayları (düşük önem + uzun kullanılmamış)</div>')
                     for p in rep["prunable"]:
@@ -753,9 +830,24 @@ def main_page():
                 if pol:
                     ui.html('<div class="formsub" style="margin-top:10px">Retrieval politikası (self-tune)</div>')
                     ui.label(f'  rel_floor = {pol.get("rel_floor")}   ·   {pol.get("reason", "")}').style("font-size:12px;color:var(--text-2)")
+                pr = rep.get("pruned") or {}
+                if pr:
+                    ui.html('<div class="formsub" style="margin-top:10px">Unutma (arşive taşındı, geri alınabilir)</div>')
+                    ui.label(f'  {", ".join(pr.get("archived") or ["aday yok"])}   ·   {pr.get("gate", "")}').style(
+                        "font-size:12px;color:var(--text-2)")
+                rt = rep.get("routing") or {}
+                if rt.get("counts"):
+                    ui.html('<div class="formsub" style="margin-top:10px">Yönlendirme istatistiği (son 50)</div>')
+                    ui.label(f'  {rt["counts"]}   ·   geçersiz öneri oranı {rt["invalid_rate"]:.0%}').style(
+                        "font-size:12px;color:var(--text-2)")
                 if rep.get("gate"):
                     ui.html('<div class="formsub" style="margin-top:10px">Validation gate (held-out kontrol)</div>')
                     ui.label(f'  {rep["gate"]}').style("font-size:12px;color:var(--text-2)")
+                comm = rep.get("communities") or {}
+                if comm:
+                    ui.html('<div class="formsub" style="margin-top:10px">Topluluk özetleri (GraphRAG-lite)</div>')
+                    ui.label(f'  {", ".join(comm.get("built") or ["yok"])}   ·   {comm.get("gate", "")}').style(
+                        "font-size:12px;color:var(--text-2)")
 
             def close_refresh():
                 dlg.close()
@@ -815,6 +907,48 @@ def main_page():
                     ui.label("Beyne kaydet")
         dlg.open()
 
+    async def apply_ability_ui():
+        """The payoff of the abilities system: a stored METHOD applied to fresh data.
+        The method persists in the brain; the data stays volatile and is never written."""
+        abilities = [m for m in engine.memory_index() if m["type"] == "ability"]
+        if not abilities:
+            ui.notify("Önce bir yetenek öğret (Yetenek öğren).")
+            return
+        with ui.dialog() as dlg, ui.card().classes("dlgcard").style("width:680px;max-width:92vw;gap:8px;padding:22px"):
+            ui.label("Yeteneği veriye uygula").style("font-weight:600;font-size:16px")
+            ui.html('<div class="formsub">Öğrenilmiş metod kalıcıdır, veri uçucudur: aşağıya taze veriyi yapıştır '
+                    '(fiyatlar, rapor, log...). Sistem metodu bu veriye uygular; veri beyne YAZILMAZ.</div>')
+            sel = ui.select({m["id"]: m["id"] for m in abilities},
+                            value=abilities[0]["id"]).props("borderless dense dark").classes("glassfield").style("width:100%")
+            qin = ui.input(placeholder="Soru (ör. bu hisse ucuz mu?)").props("borderless dense dark").classes("glassfield").style("width:100%")
+            data_in = ui.textarea(placeholder="Taze veriyi buraya yapıştır").props("borderless dark").classes("glassfield").style("width:100%;min-height:120px")
+            box = ui.column().style("width:100%;gap:6px")
+
+            async def run_apply():
+                data = (data_in.value or "").strip()
+                if not data:
+                    ui.notify("Önce veri yapıştır.")
+                    return
+                note = ui.notification("Metod veriye uygulanıyor…", spinner=True, timeout=None)
+                try:
+                    out = await run.io_bound(engine.apply_ability, sel.value, data, (qin.value or "").strip())
+                except Exception as ex:
+                    note.dismiss()
+                    ui.notify(f"Başarısız: {ex}", type="negative")
+                    return
+                note.dismiss()
+                box.clear()
+                with box:
+                    ui.html('<div class="formsub" style="color:var(--accent);margin-top:4px">Analiz (kaydedilmez)</div>')
+                    ui.label(out or "(boş yanıt)").style("font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.55")
+
+            with ui.row().style("align-self:flex-end;gap:14px;align-items:center;margin-top:4px"):
+                with ui.element("div").classes("savebtn").on("click", dlg.close):
+                    ui.label("Kapat")
+                with ui.element("div").classes("newbtn").style("margin:0").on("click", run_apply):
+                    ui.label("Uygula")
+        dlg.open()
+
     async def evolve_ui():
         abilities = [m for m in engine.memory_index() if m["type"] == "ability"]
         if not abilities:
@@ -856,10 +990,13 @@ def main_page():
                             .classes("glassfield").style("width:100%")
 
                         def adopt():
-                            engine.adopt_evolution(aid, editor.value)
+                            outcome = engine.adopt_evolution(aid, editor.value)
+                            if not outcome.get("adopted"):
+                                ui.notify(f'Benimsenmedi: {outcome.get("gate") or outcome.get("reason")}', type="warning")
+                                return
                             dlg.close()
                             refresh_current()
-                            ui.notify(f'Evrim benimsendi: {aid}  ({rep["baseline"]} → {rep["winner"]["score"]})')
+                            ui.notify(f'Evrim benimsendi: {aid}  ({outcome["before"]} → {outcome["after"]})')
 
                         with ui.element("div").classes("newbtn").style("margin:6px 0 0").on("click", adopt):
                             ui.label("Benimse")
@@ -918,7 +1055,7 @@ def main_page():
         ids = set(by_id)
         cats = ["system"] + BRANCH_ORDER
         catmap = {c: i + 1 for i, c in enumerate(BRANCH_ORDER)}
-        HUB_LABEL = {"sources": "projects", "owner": "owner", "learnings": "learnings", "past-chats": "memory", "rules": "rules"}
+        HUB_LABEL = {"sources": "projects", "owner": "owner", "learnings": "learnings", "past-chats": "memory", "rules": "rules", "reference": "reference"}
 
         # real hierarchy from part-of links: entity (parent) -> aspect (child)
         parent = {}
@@ -1013,12 +1150,31 @@ def main_page():
                         ui.label("Konsolidasyon")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", learn_ability_ui):
                         ui.label("Yetenek öğren")
+                    with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", apply_ability_ui):
+                        ui.label("Yeteneği uygula")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", evolve_ui):
                         ui.label("Yetenek evrimi")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", health_test):
                         ui.label("Sağlık testi")
                     with ui.element("div").classes("newbtn").style("margin:0;padding:8px 12px;font-size:12.5px").on("click", rescore_ui):
                         ui.label("Retro puanla")
+                    # health strip: the climbing curve, finally visible
+                    try:
+                        hl = [int(x.split()[-1]) for x in
+                              (Path(__file__).resolve().parent.parent / "cache" / "health.log")
+                              .read_text(encoding="utf-8").splitlines()[-20:] if x.strip()]
+                    except OSError:
+                        hl = []
+                    if hl:
+                        w, h = 120, 26
+                        pts = " ".join(f"{i * (w / max(1, len(hl) - 1)):.0f},{h - 2 - (v / 100) * (h - 6):.0f}"
+                                       for i, v in enumerate(hl)) if len(hl) > 1 else f"0,{h-2} {w},{h-2}"
+                        ui.html(f'<div style="display:flex;align-items:center;gap:10px;margin-left:6px">'
+                                f'<svg width="{w}" height="{h}"><polyline points="{pts}" fill="none" '
+                                f'stroke="#7bd0a0" stroke-width="2" stroke-linecap="round"/></svg>'
+                                f'<span style="font-size:11.5px;color:var(--text-3)">sağlık %{hl[-1]} · '
+                                f'{len(engine.memory_index())} hafıza · floor {getattr(engine, "rel_floor", "?")} · '
+                                f'{len(engine.gate_tasks())} gate görevi</span></div>')
                 if mems:
                     ui.html('<div class="capnote" style="margin:4px 0 0">Halka büyüklüğü = güncel önem (taban + aktiflik) · altın yol = son cevabın bağlamı · soluk düğüm = unutulmaya yüz tutmuş</div>')
                     ui.echart(option, on_point_click=on_node_click).style("width:100%;height:100%")
@@ -1180,6 +1336,39 @@ def main_page():
                         with ui.element("div").classes("sendbtn").on("click", create_src):
                             ui.html(ICON_PLUS)
 
+    # ---------- settings: choose an already downloaded local Foundry model ----------
+    def settings_ui():
+        with ui.dialog() as dlg, ui.card().classes("dlgcard").style("width:600px;max-width:92vw;gap:10px;padding:22px"):
+            ui.label("Ayarlar — sohbet modeli").style("font-weight:600;font-size:16px")
+            status = ui.label(f"Şu an aktif: {getattr(engine, 'chat_label', '?')}").style(
+                "font-size:12.5px;color:var(--accent)")
+            ui.html('<div class="formsub">Project-RAG tamamen yereldir: sohbet, hafıza ve embeddings cihazından çıkmaz.</div>')
+
+            ui.html('<div class="setdiv"></div><div class="setlabel">Lokal model (Foundry cache)</div>')
+            locals_ = engine.list_local_models()
+            with ui.row().style("gap:10px;align-items:center;width:100%;flex-wrap:nowrap"):
+                lsel = ui.select(locals_ or ["(cache boş — foundry model download <alias>)"],
+                                 value=(locals_[0] if locals_ else None)) \
+                    .props("borderless dense dark options-dark behavior=menu").classes("glassfield").style("flex:1;min-width:0")
+
+                async def use_local():
+                    if not locals_:
+                        ui.notify("Önce bir model indir: foundry model download phi-4-mini", type="warning")
+                        return
+                    note = ui.notification(f"Model yükleniyor: {lsel.value}…", spinner=True, timeout=None)
+                    ok, msg = await run.io_bound(engine.set_chat_backend, lsel.value)
+                    note.dismiss()
+                    status.text = f"Şu an aktif: {engine.chat_label}"
+                    ui.notify(msg, type=("positive" if ok else "negative"))
+
+                with ui.element("div").classes("newbtn").style("margin:0;padding:8px 14px").on("click", use_local):
+                    ui.label("Kullan")
+
+            with ui.row().style("align-self:flex-end;gap:14px;align-items:center;margin-top:6px"):
+                with ui.element("div").classes("savebtn").on("click", dlg.close):
+                    ui.label("Kapat")
+        dlg.open()
+
     # ---------- about: the animated story of how the system works, in-app ----------
     def build_about_view():
         with refs["content"]:
@@ -1215,6 +1404,10 @@ def main_page():
                     ui.html(icon)
                 btn.on("click", lambda e, n=name: set_view(n))
                 refs["railbtns"][name] = btn
+            gear = ui.element("div").classes("railbtn").style("margin-top:auto;margin-bottom:10px")
+            with gear:
+                ui.html(ICON_GEAR)
+            gear.on("click", lambda e: settings_ui())
         refs["content"] = ui.element("div").style("flex:1;height:100%;display:flex;min-width:0")
 
     render_content()

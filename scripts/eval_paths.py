@@ -15,13 +15,12 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, r"D:\project-rag\src")
 
-import store
-import engine as eng
+from config import Config
 from engine import MemoryEngine
 from store import patch_meta
 
 SCRATCH = Path(__file__).parent / "pathseval"
-REAL_MEM = Path(r"D:\project-rag\memory")
+REAL_MEM = Config().memory_dir
 FR = "foundry-rag-20260716-174356"
 
 # (answer_id, training phrasing T seeded into found_by, drifted test phrasing V)  -- V != T, both drift from the body
@@ -39,10 +38,7 @@ CONTROLS = [  # already hit cold; get their OWN trace too (symmetric learning) -
 
 
 def point(e, dst):
-    store.MEMORY_DIR = dst
-    eng.MEMORY_DIR = dst
-    eng.RULES_PATH = dst / "rules" / "scoring.md"
-    eng.CACHE_PATH = SCRATCH / "cache.json"
+    e.cfg = Config(root=SCRATCH, memory_dir=dst, cache_dir=SCRATCH)
     e._cache = e._load_cache()
     e.reload_memories()
 
@@ -70,9 +66,7 @@ def main():
     strip_found_by(dst)
 
     print("loading model once...", flush=True)
-    point_e = MemoryEngine()  # loads models with default dir first
-    point(point_e, dst)
-    e = point_e
+    e = MemoryEngine(config=Config(root=SCRATCH, memory_dir=dst, cache_dir=SCRATCH))
 
     allitems = ITEMS + CONTROLS
 

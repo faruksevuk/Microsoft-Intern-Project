@@ -1,0 +1,10 @@
+[
+  {
+    "q": "Which embedding model does this project use?",
+    "expect": ["project-tech-stack"]
+  },
+  {
+    "q": "Where does the project live on disk?",
+    "expect": ["project-pointer"]
+  }
+]

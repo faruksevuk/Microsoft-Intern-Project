@@ -22,6 +22,7 @@ All of it sits behind a **held-out validation gate** (`src/gate.py`): every self
 ## what it does
 
 - **chat grounded in your memory**, streaming, session persistence, verbatim working memory (retrieval of stored turns, not lossy summaries)
+- **compiled ("deep") mode**: the request is decomposed, every step is answered from its own retrieval and must pass a grounding check before the next step may use it, a failing step is split one level deeper, and the final integration is itself verified — if the composed answer is less grounded than its own inputs, code renders the verified findings instead. Toggle it per message; it costs ~3× latency and buys the numbers in the table below.
 - **hybrid retrieval**: dense (qwen3-embedding-0.6b) + BM25 over bodies *and* learned traces, RRF-fused, rank-1 anchored so fusion can never demote the best dense hit
 - **retrieval as policy**: relevance gate (retrieve *nothing* when nothing is relevant — three-way abstention: memory / general knowledge / honest "I don't have that"), soft branch routing (a boost, never a filter), dynamic k
 - **structured project ingest**: point it at a repo, it crawls tree+manifests+source and writes typed memories (tech stack, architecture, missings, a live repo pointer) as a `part-of` hierarchy
@@ -33,9 +34,42 @@ All of it sits behind a **held-out validation gate** (`src/gate.py`): every self
 
 All measured on the included eval scripts (`scripts/eval_*.py`), small corpus (11–70 memories), so treat them as directional:
 
+**Same model, four wrappers** (`scripts/eval_harness.py`, qwen3-4b on GPU, n=17 questions —
+6 memory / 3 drift / 5 trap / 3 general, so one answer moves a cell by 17–33 points):
+
+| arm | memory fact | drift fact | trap abstain | general | grounding | ctx chars | sec/ans |
+|---|---|---|---|---|---|---|---|
+| A bare model | 33% | 33% | 20% | 100% | — | 0 | 18.3 |
+| B naive RAG (flat cosine top-4) | 83% | 67% | 100% | 100% | 0.36 | 1837 | 19.9 |
+| C harness (retrieval as policy) | **100%** | 67% | 100% | 100% | 0.41 | 4290 | 31.8 |
+| D compiled (verified step-program) | 83% | **100%** | 100% | 100% | **0.58** | **1608** | 90.8 |
+
+The bare model answered a trap question — "the owner's finishing time in the 2019 Istanbul
+Marathon" — with a confident **2:17:06**. The same model inside the harness says it isn't in
+memory. Nothing about the weights changed.
+
+**How much model does structure replace?** (`docs/eval-ladder.svg`, same suite across the qwen3 family)
+
+| | 0.6b | 1.7b | 4b |
+|---|---|---|---|
+| bare, memory facts | 33% | 33% | 33% |
+| harness, memory facts | 50% | 67% | **100%** |
+| harness, sec/ans | 3.0 | 5.6 | 31.8 |
+
+Bare accuracy on personal facts is **flat across a 7× parameter range** — your life is not in the
+weights, so scale cannot buy it. Meanwhile 0.6b + harness (50%, 3.0s) beats 4b bare (33%, ~18s).
+Structure is worth more than a model-size step *and* an order of magnitude faster.
+
+Two honest limits in that table: the harness's trap resistance is *prompt obedience*, and it only
+locks in at 4b (40% → 40% → 100%) — while compiled mode's checks are *code*, so they hold a 60%
+floor at sizes where prompts fail. And at 0.6b the naive arm beats the harness on memory facts
+(67% vs 50%): the big persona-and-rules prompt overwhelms a 0.6B model. Scaffolding complexity is
+itself a capability cost.
+
+Other measured mechanisms (older runs, smaller corpus):
+
 | thing | baseline | this system |
 |---|---|---|
-| retrieval hit@1 (flat cosine) | 0.62 / 0.72 | 0.62 / 0.72 (parity — that axis was saturated) |
 | retrieval hit@4 | 0.69 / 0.78 | **0.85 / 0.83** |
 | context size | 100% | **46%** (query-focused compression, post-ranking so it cannot change hit@1) |
 | drift-query findability | 2/7 forever | **6/7 after use** |
@@ -58,21 +92,27 @@ copy templates\owner.template.md memory\owner\owner.md   # then edit: who are yo
 .venv\Scripts\python src\app.py
 ```
 
-First run downloads the models (qwen3-embedding-0.6b + phi-4-mini by default; override with `PRAG_CHAT_MODEL`). The app opens as a native window (NiceGUI + WebView2). Your brain starts empty — ingest a project, save a chat reflection, teach it an ability.
+First run downloads the models (qwen3-embedding-0.6b + qwen3-4b by default; override with `PRAG_CHAT_MODEL`). The app opens as a native window (NiceGUI + WebView2). Your brain starts empty — ingest a project, save a chat reflection, teach it an ability.
+
+### your GPU is probably idle — this fixes it
+
+Foundry Local's Python SDK serves a **CPU-only catalog** until GPU execution providers are
+registered, and registration does **not persist across processes**. So every model resolves to a
+`generic-cpu` build, silently, forever. Even once EPs are registered, the default variant is still
+the CPU one — the GPU build has to be selected explicitly.
+
+The engine now does both at startup (`_ensure_gpu_eps` + `_select_device_variant`), which on a 4GB
+RTX 3050 took inference from ~10 to **~44 tok/s**. Costs ~5s per launch once the EP binaries are
+cached; set `PRAG_DEVICE=cpu` to opt out. Note that `phi-4-mini` has **no CUDA build** in this
+catalog — models that do include qwen3-4b / qwen3-1.7b / qwen3-0.6b / phi-4-mini-reasoning.
 
 Your data never leaves the machine. The only network calls are the ones *you* trigger (web research / ability learning), and fetched pages are treated strictly as data, never as instructions.
 
-### optional: a stronger brain over API
+### local-only by design
 
-The harness was designed to compensate for a weak model — point the *same* harness at a strong one and everything (planning, tool use, abilities) gets sharper. Any OpenAI-compatible endpoint works:
+Chat, embeddings, memory and evaluation all run through Foundry Local. Project-RAG has no remote chat/API mode and never stores a provider API key.
 
-```bash
-set PRAG_API_BASE=https://api.openai.com/v1     # or DeepSeek / OpenRouter / Groq / LAN vLLM
-set PRAG_API_KEY=sk-...
-set PRAG_API_MODEL=gpt-5.5-mini
-```
-
-All three set → chat runs remote. **Embeddings and the memory store always stay local**; be aware that chat prompts include retrieved memory text, so pick a provider you trust. Unset them to go back to fully-local.
+The only network calls are owner-triggered web research; fetched pages are treated as untrusted data.
 
 ## repo layout
 
@@ -80,7 +120,9 @@ All three set → chat runs remote. **Embeddings and the memory store always sta
 src/
   engine.py     the core: memory, hybrid retrieval policy, salience, reflection,
                 desire paths, self-test, consolidation, abilities, validation gate wiring
-  gate.py       held-out validation gate (accept/reject/rollback for self-edits)
+  config.py     every filesystem location in one injectable object — pass one to run
+                an isolated brain (evals, tests) or embed the engine in your own app
+  gate.py       immutable held-out validation gate (accept/reject/rollback for self-edits)
   planner.py    request decomposition: triage -> plan schema -> repair -> rule fallback
   slides.py     deck spec parser (tolerant) + animated HTML / pptx renderers
   research.py   web tool layer (DuckDuckGo/Wikipedia, untrusted-data-only)
@@ -101,13 +143,31 @@ memory/         YOUR brain — gitignored, never shared
 - **the owner approves writes.** Reflection, ingest, abilities — the model proposes, you adopt. Quality comes from the human + deterministic code, not the model alone.
 - **measure, then keep or revert.** Several ideas in this repo were built, measured worse, and reverted (bullet-level ranking, aggressive audience simplification, a two-tier ranker). The eval scripts are in the repo; the failures are documented in the code comments.
 
+## evaluation protocol
+
+- Keep `cache/gate_tasks.v2.json` as a manually curated, versioned held-out set. Copy
+  `templates/gate_tasks.example.json` as a starting shape, then replace its example IDs.
+  The engine never seeds or modifies this file. Until it exists, unattended self-modification is
+  **blocked** (fail-closed), never silently accepted.
+- Successful real-use queries are recorded separately in `cache/online_monitoring_tasks.json`.
+  They are useful operational evidence, never a validation score.
+- `tests/` covers the deterministic safety core and `.github/workflows/ci.yml` runs syntax and
+  unit checks on every push. Model-backed harnesses remain explicit local runs because they
+  require Foundry models and a representative private corpus.
+
 ## limitations, honestly
 
-- the corpus is small; all numbers need re-validation at scale
-- phi-4-mini drifts to Turkish on queries containing Turkish proper nouns despite a 3-level language directive — model limit, not fixable by prompting
+- the corpus is small (12 memories) and n per eval cell is 3–6; every number is directional, and one answer moves a cell by up to 33 points
+- retrieval is a full scan over all memories each query (fine at this size, wrong at 10k) — the index needs a real vector store before scale claims
+- small local models drift to Turkish on queries containing Turkish proper nouns despite a 3-level language directive — model limit, not fixable by prompting
+- compiled mode verifies *faithfulness*, not *relevance*: a step can be grounded in memory and still not answer its sub-question (measured — it answered "name two projects" with an unrelated but genuinely-stored fact)
 - audience-appropriate pedagogical writing (explain to a 6-year-old) is beyond a 4B model
 - web search is scraping (DuckDuckGo) and inherently flaky; a real search API would harden it
-- ability edits are not yet gated (they need task-level scores, not retrieval scores)
+- ability adoption re-runs its deterministic task-level score and rejects regressions; this is
+  currently available only for `format` abilities. Domain/process abilities remain owner-authored
+  until each has a task-level evaluator; expand those suites as new ability kinds land
+- the eval scorer turned out to be the weakest link: four times in one session it punished a correct answer (a valid paraphrase, three validly-worded refusals). The trap metric now detects **fabrication** — per-question patterns for what an invented claim looks like — instead of hunting for abstention phrases, so honesty is measured rather than wording. Keyword matching on the fact questions stays a known weak spot
+- with the corrected scorer every arm scores 100% trap-safe on the current 12-memory corpus; trap resistance needs harder and more numerous traps before it discriminates between arms again
 
 ## references
 

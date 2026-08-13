@@ -1,7 +1,7 @@
-foundry-local-sdk-winml
-openai
-nicegui
-pywebview
-pypdf
-python-pptx
-httpx
+foundry-local-sdk-winml==1.2.3
+nicegui==3.14.0
+pywebview==6.2.1
+pypdf==6.14.2
+python-pptx==1.0.2
+httpx==0.28.1
+pytest==9.1.1

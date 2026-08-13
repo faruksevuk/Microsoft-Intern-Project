@@ -4,6 +4,8 @@ SAFETY: everything fetched here is UNTRUSTED DATA, never instructions. The engin
 distills it and the owner approves what persists. Nothing here is executed or obeyed.
 """
 import re
+import ipaddress
+import socket
 import urllib.parse
 
 import httpx
@@ -15,7 +17,9 @@ _DDG = "https://html.duckduckgo.com/html/"
 
 
 def _client():
-    return httpx.Client(timeout=12, headers=_UA, follow_redirects=True)
+    # Redirects are followed explicitly in fetch_url so each destination is checked
+    # before any request is sent to it.
+    return httpx.Client(timeout=12, headers=_UA, follow_redirects=False)
 
 
 def strip_html(html):
@@ -50,6 +54,24 @@ def wiki_extract(title, max_chars=6000):
 _DDG_LITE = "https://lite.duckduckgo.com/lite/"
 
 
+def _safe_public_url(url):
+    """Do not let a search result or redirect turn research into a local-network fetch."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return False
+        host = parsed.hostname.rstrip(".").lower()
+        if host in {"localhost", "localhost.localdomain"}:
+            return False
+        for _, _, _, _, sockaddr in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(sockaddr[0])
+            if not ip.is_global:
+                return False
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def web_search(query, n=3):
     """Best-effort general web search via DuckDuckGo (html then lite endpoint).
     Returns [(title, url)]. Scraping is inherently flaky / rate-limited; treat as
@@ -77,8 +99,19 @@ def web_search(query, n=3):
 
 
 def fetch_url(url, max_chars=6000):
+    """Fetch a bounded public page while validating every redirect hop first."""
+    current = url
     with _client() as c:
-        r = c.get(url).raise_for_status()
+        for _ in range(6):
+            if not _safe_public_url(current):
+                raise ValueError("refusing a non-public research URL")
+            r = c.get(current)
+            if not r.has_redirect_location:
+                break
+            current = str(r.url.join(r.headers["Location"]))
+        else:
+            raise ValueError("too many redirects")
+    r.raise_for_status()
     if "html" in r.headers.get("content-type", ""):
         return strip_html(r.text)[:max_chars]
     return r.text[:max_chars]

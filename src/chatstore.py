@@ -2,9 +2,18 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from config import Config
+from store import atomic_write_text
+
 # Chats live OUTSIDE memory/ on purpose: they are a UX archive (view / continue),
 # NOT retrieval data. The engine never reads this folder for grounding.
-CHATS_DIR = Path(__file__).resolve().parent.parent / "chats"
+CHATS_DIR = Config().chats_dir
+
+
+def use_config(cfg):
+    """Point the chat archive at a host app's workspace (see config.Config)."""
+    global CHATS_DIR
+    CHATS_DIR = cfg.chats_dir
 
 
 def _now():
@@ -28,7 +37,7 @@ def save_session(session):
     CHATS_DIR.mkdir(parents=True, exist_ok=True)
     session["updated"] = _now()
     path = CHATS_DIR / f"{session['id']}.json"
-    path.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(path, json.dumps(session, ensure_ascii=False, indent=2))
     return path
 
 

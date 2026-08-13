@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, r"D:\project-rag\src")
-import store
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import engine as eng
 import research
+from config import Config
 from engine import MemoryEngine
 
 SCRATCH = Path(__file__).parent / "jarviseval"
@@ -28,21 +28,14 @@ CANNED = {
 
 
 def main():
-    SCRATCH.mkdir(exist_ok=True)
-    dst = SCRATCH / "corpus"
-    if dst.exists():
-        shutil.rmtree(dst)
-    shutil.copytree(Path(r"D:\project-rag\memory"), dst)
-    store.MEMORY_DIR = dst
-    eng.MEMORY_DIR = dst
-    eng.RULES_PATH = dst / "rules" / "scoring.md"
-    eng.CACHE_PATH = SCRATCH / "cache.json"
-    eng.POLICY_PATH = SCRATCH / "policy.json"
+    cfg = Config(root=SCRATCH, memory_dir=SCRATCH / "corpus", cache_dir=SCRATCH)
+    if cfg.memory_dir.exists():
+        shutil.rmtree(cfg.memory_dir)
+    cfg.memory_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(Config().memory_dir, cfg.memory_dir)
 
     print("loading model once...", flush=True)
-    e = MemoryEngine()
-    e._cache = e._load_cache()
-    e.reload_memories()
+    e = MemoryEngine(config=cfg)
 
     # ---- MOCK the web so distill/save/apply are verified deterministically ----
     research.research = lambda q, **k: CANNED

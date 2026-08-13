@@ -1,0 +1,24 @@
+[
+  {
+    "id": "gate-embedding-model",
+    "split": "gate",
+    "category": "memory",
+    "q": "Which embedding model does this project use?",
+    "expect": ["project-tech-stack"],
+    "notes": "Replace the ID with one from the private corpus."
+  },
+  {
+    "id": "dev-drift-embedding",
+    "split": "dev",
+    "category": "drift",
+    "q": "Which vector model powers local search?",
+    "expect": ["project-tech-stack"]
+  },
+  {
+    "id": "gate-trap-private-fact",
+    "split": "gate",
+    "category": "trap",
+    "q": "What was the owner's exact marathon time?",
+    "expect": []
+  }
+]

@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, r"D:\project-rag\src")
-import engine as eng
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from config import Config
 from engine import MemoryEngine
 
 FR = "foundry-rag-20260716-174356"
@@ -24,16 +24,19 @@ QS = [
     ("What design patterns appear in the foundry-rag codebase?", {f"{FR}-design-patterns"}),
     ("What is the core idea behind the foundry-rag project?", {f"{FR}-idea", FR}),
     ("What is still missing or TODO in foundry-rag?", {f"{FR}-missings-todos"}),
-    ("Is SQLite used anywhere in the stack?", {f"{FR}-tech-stack", f"{FR}-architecture"}),
+    # was "Is SQLite used anywhere in the stack?" — that claim was false and is corrected
+    ("What does the stack run on and how are memories stored?", {f"{FR}-tech-stack", f"{FR}-architecture"}),
     ("If I forget where the base project folder is, which note points to it?", {f"{FR}-pointer", FR}),
 ]
 
-eng.POLICY_PATH = Path(r"D:\project-rag\scripts\pathseval") / "policy_test.json"
-eng.POLICY_PATH.parent.mkdir(exist_ok=True)
-if eng.POLICY_PATH.exists():
-    eng.POLICY_PATH.unlink()
+# reads the REAL corpus (measurement only, no writes) but keeps its tuning state in a
+# scratch cache, so a policy experiment never overwrites the owner's learned floor
+CFG = Config(cache_dir=Path(__file__).resolve().parent / "selftuneeval")
+CFG.cache_dir.mkdir(parents=True, exist_ok=True)
+if CFG.policy_path.exists():
+    CFG.policy_path.unlink()
 
-e = MemoryEngine()
+e = MemoryEngine(config=CFG)
 e._mark_used = lambda picked: None                       # don't mutate the brain
 
 

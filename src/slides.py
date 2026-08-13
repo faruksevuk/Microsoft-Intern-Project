@@ -14,6 +14,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from store import atomic_write_text
+
 MAX_SLIDES = 12
 MAX_BULLETS = 6
 
@@ -183,7 +185,7 @@ def render_html(deck, path):
     html = _HTML.replace("%%TITLE%%", _esc(deck["title"])).replace("%%SLIDES%%", "".join(parts))
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(html, encoding="utf-8")
+    atomic_write_text(path, html)
     return path
 
 

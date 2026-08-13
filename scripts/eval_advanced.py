@@ -1,6 +1,6 @@
 """Verify the two advanced capabilities:
   #1 run_consolidation  -> self-training maintenance: health before/after, repairs, flags
-  #2 answer_reasoned    -> test-time reasoning: grounding vs one-shot on the same questions
+  #2 answer_compiled    -> compiler mode: verified step-program vs one-shot, same questions
 Runs on an isolated copy of the brain; the real memory is never touched.
 """
 import shutil
@@ -8,22 +8,12 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, r"D:\project-rag\src")
-import store
-import engine as eng
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from config import Config
 from engine import MemoryEngine, cosine
 
 SCRATCH = Path(__file__).parent / "adveval"
-REAL_MEM = Path(r"D:\project-rag\memory")
-
-
-def point(e, dst):
-    store.MEMORY_DIR = dst
-    eng.MEMORY_DIR = dst
-    eng.RULES_PATH = dst / "rules" / "scoring.md"
-    eng.CACHE_PATH = SCRATCH / "cache.json"
-    e._cache = e._load_cache()
-    e.reload_memories()
+REAL_MEM = Config().memory_dir
 
 
 def grounding(e, ans, bodies):
@@ -53,8 +43,7 @@ def main():
     shutil.copytree(REAL_MEM, dst)
 
     print("loading model once...", flush=True)
-    e = MemoryEngine()
-    point(e, dst)
+    e = MemoryEngine(config=Config(root=SCRATCH, memory_dir=dst, cache_dir=SCRATCH))
 
     print("\n===== #1 SELF-TRAINING CONSOLIDATION =====", flush=True)
     rep = e.run_consolidation(auto=True, deep=True)
@@ -65,7 +54,7 @@ def main():
     print(f"conflicts flagged: {rep['conflicts']}")
     print(f"prune candidates: {[p['id'] for p in rep['prunable']]}")
 
-    print("\n===== #2 TEST-TIME REASONING vs ONE-SHOT =====", flush=True)
+    print("\n===== #2 COMPILER MODE vs ONE-SHOT =====", flush=True)
     QS = [
         "Which embedding model does foundry-rag use, and where does the project live on disk?",
         "What is still missing in foundry-rag and what is its core idea?",
@@ -73,14 +62,16 @@ def main():
     for q in QS:
         os_ans, os_bodies = one_shot(e, q)
         trace = []
-        rz_ans = e.answer_reasoned(q, trace=trace)
+        cz_ans = e.answer_compiled(q, trace=trace)
         subs = next((v for k, v in trace if k == "subquestions"), [])
-        rz_ids = next((v for k, v in trace if k == "retrieved"), [])
-        rz_bodies = [e._find(i)["body"] for i in rz_ids if e._find(i)]
+        steps = next((v for k, v in trace if k == "steps"), [])
+        cz_ids = next((v for k, v in trace if k == "picked_ids"), [])
+        cz_bodies = [e._find(i)["body"] for i in cz_ids if e._find(i)]
         print(f"\nQ: {q}")
         print(f"  sub-questions: {subs}")
+        print(f"  step verdicts: {steps}")
         print(f"  one-shot   grounding={grounding(e, os_ans, os_bodies):.2f}  | {os_ans[:110]!r}")
-        print(f"  reasoned   grounding={grounding(e, rz_ans, rz_bodies):.2f}  | {rz_ans[:110]!r}")
+        print(f"  compiled   grounding={grounding(e, cz_ans, cz_bodies):.2f}  | {cz_ans[:110]!r}")
 
     print("\nADV EVAL DONE", flush=True)
 

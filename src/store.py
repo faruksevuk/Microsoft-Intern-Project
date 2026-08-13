@@ -1,7 +1,33 @@
+import os
+import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-MEMORY_DIR = ROOT / "memory"
+from config import Config
+
+# Default location, kept so the store is usable standalone (`python src/store.py`).
+# Library callers pass their own directory to load_all() instead.
+MEMORY_DIR = Config().memory_dir
+
+
+def atomic_write_text(path, text, encoding="utf-8"):
+    """Replace a text file atomically, so an interrupted UI worker cannot leave JSON
+    or a memory file half-written.  The temporary file lives beside the target, which
+    keeps ``os.replace`` atomic on Windows too."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def parse_memory(path):
@@ -57,14 +83,16 @@ def patch_meta(path, updates, remove=()):
         else:
             out.append(line)
     out += [f"{key}: {_fmt_meta(val)}" for key, val in updates.items() if key not in done]
-    path.write_text("\n".join(["---"] + out + ["---"] + lines[close + 1:]) + "\n", encoding="utf-8")
+    atomic_write_text(path, "\n".join(["---"] + out + ["---"] + lines[close + 1:]) + "\n")
     return True
 
 
-def load_all():
-    """Load every memory file under memory/."""
+def load_all(memory_dir=None):
+    """Load every memory file under the memory tree (except .archive - forgotten-but-recoverable)."""
     memories = []
-    for path in sorted(MEMORY_DIR.rglob("*.md")):
+    for path in sorted(Path(memory_dir or MEMORY_DIR).rglob("*.md")):
+        if ".archive" in path.parts:
+            continue
         meta, body = parse_memory(path)
         memories.append({"path": path, "meta": meta, "body": body})
     return memories
