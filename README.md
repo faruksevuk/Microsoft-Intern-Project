@@ -12,12 +12,12 @@ Small local models are weak. You cannot fix that with prompting, and you cannot 
 
 Four things here learn from use, none of them touch model weights:
 
-1. **desire paths** — a memory that gets found-and-cited earns the query as a `found_by` trace; drifted future phrasings then find it. Measured: drift-query hit@1 went **0/5 → 4/5** after single use.
-2. **self-tuning retrieval** — how many memories to retrieve (`rel_floor`) is learned from citation feedback, band-clamped, evidence-gated. Measured: over-retrieval k 7.0 → 3.8 with hit@1 flat.
+1. **desire paths** — a memory that gets found-and-cited earns the query as a `found_by` trace; drifted future phrasings then find it. Latest local run: drift-query hit@1 **0/5 → 4/5** after one seeded use.
+2. **self-tuning retrieval** — how many memories to retrieve (`rel_floor`) is learned from citation feedback, band-clamped, evidence-gated. Latest local run: average k **7.0 → 5.8**; each accepted step preserved the curated gate score.
 3. **consolidation ("sleep")** — the brain probes each memory with its own content; unfindable ones get doc2query repair questions, contradictions get flagged. Measured: findability health **50% → 80%** in one pass.
 4. **abilities** — reusable *methods* (procedural memory), typed `format` / `domain` / `process`. Learned once from research, then applied to fresh volatile data. The stock price is never stored; *how to analyze a stock* is. Abilities also **evolve**, AlphaEvolve-style: diverse variants are generated, scored by a deterministic evaluator (first-try parse + structure + grounding), and the winner is adopted only with owner approval — losers are archived and never re-proposed. Measured, generation 1: **0.667 → 0.800**.
 
-All of it sits behind a **held-out validation gate** (`src/gate.py`): every self-modification is re-measured on curated tasks and rolled back if the score drops. Live test: a harmful ranking edit (hit@1 0.583 → 0.333) was rejected and restored automatically.
+All of it sits behind a **held-out validation gate** (`src/gate.py`): every unattended self-modification is re-measured on curated tasks and rolled back if the score drops. If no curated gate exists, it is blocked (fail-closed), not accepted without evidence.
 
 ## what it does
 
@@ -30,25 +30,39 @@ All of it sits behind a **held-out validation gate** (`src/gate.py`): every self
 - **slide generation**: "make me a deck about X" → triage → plan → retrieve/research → the model emits a small JSON spec → *code* renders an animated self-contained HTML deck + editable .pptx. The model never touches a file format; that is why the output looks good.
 - **the brain view**: force-graph of the memory tree, node click to edit/delete, one-click consolidation
 
-## numbers
+## current evidence
 
-All measured on the included eval scripts (`scripts/eval_*.py`), small corpus (11–70 memories), so treat them as directional:
+The following were re-run locally on **2026-08-13** with `qwen3-4b` on the CUDA provider and the current 12-memory private corpus. They are small-corpus results, so they show mechanism behaviour rather than broad generalization.
 
-**Same model, four wrappers** (`scripts/eval_harness.py`, qwen3-4b on GPU, n=17 questions —
+| mechanism | current result | what it establishes |
+|---|---:|---|
+| curated validation gate | **8/9 hit@1 (0.889)** | a real, immutable gate is active; it is no longer an auto-seeded proxy |
+| desire paths | **0/5 → 4/5 hit@1** | one use can make four formerly-unfindable drifted phrasings retrieve their intended memory |
+| self-tuning retrieval | **k 7.0 → 5.8** | the controller removes 17% of retrieved context under oracle citation feedback |
+| gate through tuning | **0.889 → 0.889** at every accepted step | tuning did not reduce curated retrieval hit@1 |
+| deterministic safety suite | **14/14 passed** | fail-closed gate, online/gate separation, redirect safety, atomic writes, and eval schema are covered |
+
+`scripts/eval_gate.py`, `scripts/eval_paths.py`, and `scripts/eval_selftune.py` reproduce the first four rows. The gate report intentionally exposes its one miss: the broad historical `foundry-rag` overview outranks the specific UI/UX memory for one UI task. That is a memory-quality issue to fix, not a metric to hide.
+
+### historical wrapper comparison
+
+The broader four-arm generation harness has not yet been re-run after the fail-closed gate and benchmark changes. Its last local run is retained below as **historical**, not a current release claim. Re-run `scripts/eval_harness.py` before citing it externally.
+
+**Last run: 2026-07-27. Same model, four wrappers** (`scripts/eval_harness.py`, qwen3-4b on GPU, n=17 questions —
 6 memory / 3 drift / 5 trap / 3 general, so one answer moves a cell by 17–33 points):
 
 | arm | memory fact | drift fact | trap abstain | general | grounding | ctx chars | sec/ans |
 |---|---|---|---|---|---|---|---|
-| A bare model | 33% | 33% | 20% | 100% | — | 0 | 18.3 |
-| B naive RAG (flat cosine top-4) | 83% | 67% | 100% | 100% | 0.36 | 1837 | 19.9 |
-| C harness (retrieval as policy) | **100%** | 67% | 100% | 100% | 0.41 | 4290 | 31.8 |
-| D compiled (verified step-program) | 83% | **100%** | 100% | 100% | **0.58** | **1608** | 90.8 |
+| A bare model | 17% | 67% | 40% | 100% | — | 0 | 31.1 |
+| B naive RAG (flat cosine top-4) | **100%** | 67% | 100% | 100% | 0.29 | 2032 | 32.1 |
+| C harness (retrieval as policy) | 83% | 67% | 80% | 100% | 0.35 | 4285 | 38.4 |
+| D compiled (verified step-program) | 83% | **100%** | 100% | 100% | **0.42** | **1373** | 101.7 |
 
 The bare model answered a trap question — "the owner's finishing time in the 2019 Istanbul
 Marathon" — with a confident **2:17:06**. The same model inside the harness says it isn't in
 memory. Nothing about the weights changed.
 
-**How much model does structure replace?** (`docs/eval-ladder.svg`, same suite across the qwen3 family)
+**Historical model-size experiment** (`docs/eval-ladder.svg`, same suite across the qwen3 family; re-run required before external use)
 
 | | 0.6b | 1.7b | 4b |
 |---|---|---|---|
@@ -66,7 +80,7 @@ floor at sizes where prompts fail. And at 0.6b the naive arm beats the harness o
 (67% vs 50%): the big persona-and-rules prompt overwhelms a 0.6B model. Scaffolding complexity is
 itself a capability cost.
 
-Other measured mechanisms (older runs, smaller corpus):
+Other historical mechanism runs (older corpus/configuration; re-run before external use):
 
 | thing | baseline | this system |
 |---|---|---|
@@ -154,6 +168,16 @@ memory/         YOUR brain — gitignored, never shared
 - `tests/` covers the deterministic safety core and `.github/workflows/ci.yml` runs syntax and
   unit checks on every push. Model-backed harnesses remain explicit local runs because they
   require Foundry models and a representative private corpus.
+
+Run the current evidence suite locally:
+
+```powershell
+.venv\Scripts\python -m pytest -q
+.venv\Scripts\python scripts\validate_eval_set.py cache\gate_tasks.v2.json
+.venv\Scripts\python scripts\eval_gate.py
+.venv\Scripts\python scripts\eval_paths.py
+.venv\Scripts\python scripts\eval_selftune.py
+```
 
 ## limitations, honestly
 

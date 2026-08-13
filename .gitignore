@@ -11,8 +11,10 @@ scripts/jarviseval/
 scripts/pathseval/
 scripts/gateeval/
 scripts/harnesseval/
+scripts/selftuneeval/
 scripts/eval_harness_answers*.txt
 scripts/eval_harness_summary.json
+scripts/eval_gate_report.json
 *.db
 __pycache__/
 .venv/

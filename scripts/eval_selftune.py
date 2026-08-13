@@ -4,6 +4,7 @@ when it's retrieved. Over rounds the controller should tighten from over-retriev
 (k shrinks, precision up) while hit@1 and gold-retrieval hold. Isolated; brain untouched.
 """
 import sys
+import shutil
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -35,6 +36,12 @@ CFG = Config(cache_dir=Path(__file__).resolve().parent / "selftuneeval")
 CFG.cache_dir.mkdir(parents=True, exist_ok=True)
 if CFG.policy_path.exists():
     CFG.policy_path.unlink()
+# The policy experiment needs the same curated gate as the owner brain. Copy it to
+# the scratch cache so tuning is truly gated yet cannot mutate private live state.
+OWNER_GATE = Config().gate_tasks_path
+if not OWNER_GATE.exists():
+    raise SystemExit(f"missing curated gate: {OWNER_GATE}")
+shutil.copy2(OWNER_GATE, CFG.gate_tasks_path)
 
 e = MemoryEngine(config=CFG)
 e._mark_used = lambda picked: None                       # don't mutate the brain
