@@ -108,8 +108,7 @@ body{ background:var(--bg) !important; }
 .bubble-a{ background:var(--surface); border:1px solid var(--stroke); color:var(--text);
   padding:11px 15px; border-radius:19px 19px 19px 6px; max-width:78%; font-size:14px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
 .welcome{ margin:auto; text-align:center; display:flex; flex-direction:column; align-items:center; gap:13px; padding-top:11vh; }
-.welcome .wm{ width:54px; height:54px; border-radius:14px; background:var(--accent); display:flex; align-items:center; justify-content:center; }
-.welcome .wm svg{ width:28px; height:28px; color:#fff; } .welcome h2{ font-size:19px; font-weight:600; color:var(--text); margin:0; }
+.welcome h2{ font-size:19px; font-weight:600; color:var(--text); margin:0; }
 .welcome p{ font-size:13.5px; color:var(--text-3); margin:0; max-width:330px; line-height:1.5; }
 .inputwrap{ padding:14px 24px 22px; }
 .inputbar{ max-width:760px; margin:0 auto; display:flex; align-items:center; gap:8px; background:var(--surface-2);
@@ -357,7 +356,6 @@ def main_page():
             refs["welcome"] = True
             with refs["chatcol"]:
                 with ui.element("div").classes("welcome"):
-                    ui.html(f'<div class="wm">{ICON_BRAND}</div>')
                     ui.html("<h2>Your memory</h2>")
                     ui.html("<p>Ask anything grounded in what you've saved, or open a memory on the left.</p>")
         else:
