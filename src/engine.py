@@ -298,6 +298,19 @@ def strip_reasoning(text):
     return out.strip()
 
 
+def visible_stream_text(text):
+    """Return only text that is safe to reveal while a completion is streaming."""
+    raw = text or ""
+    lead = raw.lstrip()
+    marker = "<think>"
+    # Do not reveal a partial tag while the model is still emitting it.
+    if lead and marker.startswith(lead.lower()):
+        return ""
+    if _THINK_OPEN.search(raw) and not _THINK_BLOCK.search(raw):
+        return ""
+    return strip_reasoning(raw)
+
+
 def cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
@@ -317,6 +330,24 @@ def slugify(name):
     while "--" in s:
         s = s.replace("--", "-")
     return s.strip("-")[:30] or "source"
+
+
+def named_projects(query, memories):
+    """Return project labels explicitly named in a query.
+
+    Project labels are owner-provided identifiers, not soft semantic hints. An exact
+    mention therefore scopes retrieval to that project's memory subtree.
+    """
+    q = " ".join(tokenize(query))
+    if not q:
+        return set()
+    found = set()
+    for m in memories:
+        project = str(m.get("meta", {}).get("project") or "").strip()
+        label = " ".join(tokenize(project.replace("-", " ").replace("_", " ")))
+        if label and re.search(r"(?<!\w)" + re.escape(label) + r"(?!\w)", q):
+            found.add(project)
+    return found
 
 
 PROJECT_CATEGORIES = ["tech stack", "architecture", "ui/ux patterns", "design patterns", "idea", "missings / todos"]
@@ -396,6 +427,29 @@ def read_project(path, max_chars=7000):
         parts.append(block)
         remaining -= len(block)
     return "\n".join(parts)[:max_chars]
+
+
+def detected_stack_facts(path):
+    """Extract versioned frontend dependencies deterministically when available.
+
+    The model still summarizes the project, but dependency versions are source facts
+    and should not be lost in a long generative project-analysis pass.
+    """
+    manifest = Path(path) / "package.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    runtime = data.get("dependencies") if isinstance(data.get("dependencies"), dict) else {}
+    dev = data.get("devDependencies") if isinstance(data.get("devDependencies"), dict) else {}
+    lines = []
+    for package in ("next", "react", "react-dom"):
+        if runtime.get(package):
+            lines.append(f"- {package} {runtime[package]} (package.json dependency)")
+    for package in ("typescript", "prettier"):
+        if dev.get(package):
+            lines.append(f"- {package} {dev[package]} (package.json dev dependency)")
+    return "\n".join(lines)
 
 
 def chunk_text(text, max_chars=520):
@@ -980,18 +1034,24 @@ class MemoryEngine:
         if not self.memories:
             self.last_selected_ids, self._last_picked = [], []
             return []
+        # A named project is an explicit owner constraint, not merely a ranking cue.
+        # This prevents unrelated memories with stale found_by traces from hijacking
+        # a question such as "the tech stack of showcase".
+        project_scope = named_projects(query, self.memories)
+        candidates = [m for m in self.memories if m["meta"].get("project") in project_scope] \
+            if project_scope else self.memories
         qtoks = tokenize(query)
         route = self._routed_branch(q_vec)
         route_boost = self.param("route_boost", ROUTE_BOOST)
         dvals, bvals = {}, {}
-        for m in self.memories:
+        for m in candidates:
             d = self._dense_score(q_vec, m)
             if route and m["meta"].get("branch") == route:
                 d *= (1 + route_boost)
             dvals[id(m)] = d
             bvals[id(m)] = self._bm25_score(qtoks, m["btoks"])
-        dense = sorted(self.memories, key=lambda m: dvals[id(m)], reverse=True)
-        lexical = sorted(self.memories, key=lambda m: bvals[id(m)], reverse=True)
+        dense = sorted(candidates, key=lambda m: dvals[id(m)], reverse=True)
+        lexical = sorted(candidates, key=lambda m: bvals[id(m)], reverse=True)
         rrf = {}
         for r, m in enumerate(dense):
             rrf[id(m)] = rrf.get(id(m), 0.0) + 1.0 / (RRF_K + r)
@@ -1002,7 +1062,7 @@ class MemoryEngine:
         if best_dense < self.param("relevance_gate", RELEVANCE_GATE):   # nothing relevant -> abstain / general knowledge
             self.last_selected_ids, self._last_picked = [], []
             return []
-        fused = [top] + [m for m in sorted(self.memories, key=lambda m: rrf[id(m)], reverse=True) if m is not top]
+        fused = [top] + [m for m in sorted(candidates, key=lambda m: rrf[id(m)], reverse=True) if m is not top]
         kmax = int(self.param("k_max", K_MAX))
         floor = getattr(self, "rel_floor", REL_FLOOR)
         picked = [top]                                    # gate passed -> keep at least the top
@@ -1013,7 +1073,7 @@ class MemoryEngine:
                 picked.append(m)
         # associative recall: 1-hop graph neighbors of the picked set join at a reduced
         # bar - the graph is finally TRAVERSED, not just drawn (multi-hop step one)
-        by_mid = {m["meta"].get("id"): m for m in self.memories}
+        by_mid = {m["meta"].get("id"): m for m in candidates}
         seen_ids = {m["meta"].get("id") for m in picked}
         for m in list(picked):
             if len(picked) >= kmax:
@@ -1025,9 +1085,7 @@ class MemoryEngine:
                 if n is not None and nid not in seen_ids and dvals[id(n)] >= floor * NBR_FLOOR_RATIO:
                     picked.append(n)
                     seen_ids.add(nid)
-        by_index = sorted(range(len(self.memories)),
-                          key=lambda j: cosine(q_vec, self.index_vectors[j]), reverse=True)
-        index_rank = {id(self.memories[j]): r + 1 for r, j in enumerate(by_index)}
+        index_rank = {id(m): r + 1 for r, m in enumerate(dense)}
         self._mark_used(picked)
         self.last_selected_ids = [m["meta"].get("id") for m in picked]
         self._last_picked = [(m, index_rank.get(id(m), 99)) for m in picked]
@@ -1205,12 +1263,24 @@ class MemoryEngine:
 
     def answer_stream(self, query):
         messages = self._prep_messages(self._build_messages(query))
-        ans = ""
+        raw, emitted = "", ""
         for chunk in self.chat.complete_streaming_chat(messages):
             if chunk.choices and chunk.choices[0].delta.content:
                 tok = chunk.choices[0].delta.content
-                ans += tok
-                yield tok
+                raw += tok
+                visible = visible_stream_text(raw)
+                if visible.startswith(emitted):
+                    delta = visible[len(emitted):]
+                    if delta:
+                        emitted = visible
+                        yield delta
+        ans = strip_reasoning(raw)
+        # A closed reasoning block may leave the final answer un-emitted. The normal
+        # path and the streaming path now commit exactly the same clean text.
+        if ans.startswith(emitted):
+            delta = ans[len(emitted):]
+            if delta:
+                yield delta
         self._commit(query, ans)
 
     # ---- test-time reasoning: make the small local model punch above one-shot ----
@@ -1916,6 +1986,7 @@ class MemoryEngine:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         parent_id = f"{slug}-{stamp}"
         base = self.cfg.memory_dir / "sources" / slug
+        stack_facts = detected_stack_facts(path)
         child_links = []
         ptr_id = f"{parent_id}-pointer"
         self._write_memory(base / f"{ptr_id}.md", ptr_id, "sources", slug, "pointer", 55,
@@ -1923,6 +1994,8 @@ class MemoryEngine:
         child_links.append(f"{ptr_id}:pointer")
         for cat, body in categories.items():
             cid = f"{parent_id}-{slugify(cat)}"
+            if cat == "tech stack" and stack_facts:
+                body = stack_facts + "\n" + body.lstrip()
             self._write_memory(base / f"{cid}.md", cid, "sources", slug, "detail", 50,
                                body, [f"{parent_id}:part-of"], f"{name} - {cat}")
             child_links.append(f"{cid}:{slugify(cat)}")
