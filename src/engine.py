@@ -44,7 +44,6 @@ GPU_VARIANT_KEYS = ("cuda-gpu", "-gpu")   # preference order among a model's var
 # real brevity lever is the inline word-limit directive in _build_messages; this is the
 # safety net behind it.
 MAX_ANSWER_TOKENS = int(os.getenv("PRAG_MAX_TOKENS", "1500"))
-PROJECT_ANALYSIS_MAX_TOKENS = 420
 # ---- compiler mode (verified step-program; arm D in scripts/eval_harness.py) ----
 COMPILE_GROUND_MIN = 0.5   # a step's answer must clear this grounding share or it is dropped
 SEG_LEX_BONUS = 0.05    # _compact_body: bonus per query token shared with a segment — dense
@@ -937,32 +936,24 @@ class MemoryEngine:
                 out += chunk.choices[0].delta.content
         return strip_reasoning(out)
 
-    def _complete_safe(self, messages, retries=2, max_tokens=None):
+    def _complete_safe(self, messages, retries=2):
         """The local Foundry runtime intermittently cancels a streaming completion
         ('Operation was cancelled') under load. Retry with linear backoff, then give up
         gracefully so one transient does not abort a multi-step job (e.g. a 6-category
         analysis, a reflection, or a self-test sweep)."""
-        settings = getattr(self.chat, "settings", None)
-        previous_max_tokens = getattr(settings, "max_tokens", None)
-        if max_tokens is not None and settings is not None:
-            settings.max_tokens = max_tokens
-        try:
-            for attempt in range(retries + 1):
-                try:
-                    out = self._complete(messages)
-                    # empty also means "reasoning ran past the token cap and ate the answer"
-                    # (strip_reasoning returns "" for an unclosed block) - worth one more try
-                    if out.strip() or attempt >= retries:
-                        return out
-                except Exception as ex:
-                    if attempt >= retries:
-                        print(f"[complete] gave up after {attempt + 1} tries: {ex}")
-                        return ""
-                time.sleep(1.5 * (attempt + 1))   # let the runtime recover before retrying
-            return ""
-        finally:
-            if max_tokens is not None and settings is not None:
-                settings.max_tokens = previous_max_tokens
+        for attempt in range(retries + 1):
+            try:
+                out = self._complete(messages)
+                # empty also means "reasoning ran past the token cap and ate the answer"
+                # (strip_reasoning returns "" for an unclosed block) - worth one more try
+                if out.strip() or attempt >= retries:
+                    return out
+            except Exception as ex:
+                if attempt >= retries:
+                    print(f"[complete] gave up after {attempt + 1} tries: {ex}")
+                    return ""
+            time.sleep(1.5 * (attempt + 1))   # let the runtime recover before retrying
+        return ""
 
     # ---- session management ----
     def set_session(self, session):
@@ -1935,17 +1926,14 @@ class MemoryEngine:
         sections = "\n".join(f"## {cat}" for cat in PROJECT_CATEGORIES)
         prompt = (
             f'Analyze the local project "{name or "project"}" using only the files below. '
-            'Return exactly these six Markdown headings, in this order, each followed by at most two short bullet points '\
-            '(at most 12 words per bullet): '
+            'Return exactly these six Markdown headings, in this order, each followed by 2-4 short bullet points: '\
             f'\n{sections}\n\n'
             'Name concrete files, libraries, and mechanisms you can actually see. '
             'If a category is unclear, write "- not clear from the files" under that heading. '
             'Do not add a preamble, conclusion, or extra headings.\n\n'
             f'{ctx}'
         )
-        raw = self._complete_safe(
-            [{"role": "user", "content": prompt}], retries=1, max_tokens=PROJECT_ANALYSIS_MAX_TOKENS,
-        )
+        raw = self._complete_safe([{"role": "user", "content": prompt}])
         cats = parse_project_analysis(raw)
         return {"path": path, "name": name, "categories": cats}
 
