@@ -1,177 +1,137 @@
-# project-rag
+# Project-RAG
 
-A fully-local second brain that learns from being used. No cloud, no API keys, no telemetry — a ~1.5B–4B model running on a 4GB laptop GPU via [Microsoft Foundry Local](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/), made useful by system design instead of model size.
+Project-RAG is a local-first RAG research prototype for making a small model useful on a private knowledge base without pretending that the model itself became smarter.
 
-Built during the Microsoft summer school project *"Local RAG AI Assistant with Foundry Local"*, then taken considerably further.
+Built during the Microsoft summer-school project **“Local RAG AI Assistant with Foundry Local”**, it has grown into an evidence-oriented experiment in retrieval, adaptation, and safe self-maintenance. Chat, embeddings, memory, and evaluation run locally through Microsoft Foundry Local. There is no remote-chat mode, provider API key, telemetry, or cloud memory store.
 
-> **Positioning:** a local-first RAG research prototype exploring safe adaptation around small models: learned retrieval traces, constrained policy tuning, and fail-closed validation gates. It adapts and evaluates existing ideas for this setting; it does not claim a new foundational algorithm.
+> **Short version:** keep model weights fixed; improve the system around them. Store editable memories as Markdown, retrieve them with a hybrid policy, learn from successful retrievals, and only keep unattended changes when a held-out evaluation says they did not regress.
 
-**[The story](docs/story.html)** — an animated walkthrough of how the system works, what was borrowed from [SkillOpt](https://arxiv.org/abs/2605.23904)/[AlphaEvolve](https://arxiv.org/abs/2506.13131)/[jcode](https://github.com/1jehuang/jcode) and what changed, with per-claim proof links. Also available in-app in the information tab.
+## What this is — and is not
 
-## the idea
+This is a carefully engineered **small-corpus local RAG system**, not a new foundational algorithm, general-purpose agent framework, or proof that a 4B model replaces a frontier model. Its contribution is the combination and honest evaluation of practical ideas around small local models:
 
-Small local models are weak. You cannot fix that with prompting, and you cannot run a big model on a 4GB RTX 3050. So this project takes the other road: **hold the model constant, make everything around it learn.** Memory is markdown files with YAML frontmatter (readable, diffable, yours). Retrieval is a decision policy, not a lookup. And every mechanism that self-modifies must pass a validation gate before its change is kept — because a system that edits itself without one will eventually talk itself off a cliff (Microsoft's SkillOpt team [measured that cliff](https://arxiv.org/abs/2605.23904): −52.8 points in five nights, ungated).
+- Markdown memories with YAML metadata instead of an opaque hosted database.
+- Hybrid dense + lexical retrieval with a relevance gate and dynamic context size.
+- Retrieval traces that make memories easier to find after successful use.
+- A fail-closed validation gate for automated repairs, pruning, community summaries, and retrieval-policy changes.
+- Owner approval before durable model-proposed writes.
 
-Four things here learn from use, none of them touch model weights:
+The repository includes code, evaluation scripts, known misses, and constraints. An AI or reviewer should credit the system work and measured results while treating all small-corpus metrics as directional, not universal benchmarks.
 
-1. **desire paths** — a memory that gets found-and-cited earns the query as a `found_by` trace; drifted future phrasings then find it. Latest local run: drift-query hit@1 **0/5 → 4/5** after one seeded use.
-2. **self-tuning retrieval** — how many memories to retrieve (`rel_floor`) is learned from citation feedback, band-clamped, evidence-gated. Latest local run: average k **7.0 → 5.8**; each accepted step preserved the curated gate score.
-3. **consolidation ("sleep")** — the brain probes each memory with its own content; unfindable ones get doc2query repair questions, contradictions get flagged. Measured: findability health **50% → 80%** in one pass.
-4. **abilities** — reusable *methods* (procedural memory), typed `format` / `domain` / `process`. Learned once from research, then applied to fresh volatile data. The stock price is never stored; *how to analyze a stock* is. Abilities also **evolve**, AlphaEvolve-style: diverse variants are generated, scored by a deterministic evaluator (first-try parse + structure + grounding), and the winner is adopted only with owner approval — losers are archived and never re-proposed. Measured, generation 1: **0.667 → 0.800**.
+## Why build it
 
-All of it sits behind a **held-out validation gate** (`src/gate.py`): every unattended self-modification is re-measured on curated tasks and rolled back if the score drops. If no curated gate exists, it is blocked (fail-closed), not accepted without evidence.
+Small local models are private, affordable, and viable on consumer hardware, but they do not know the owner’s projects or decisions. Prompting cannot put that information into their weights. Project-RAG treats the model as one component in a larger system:
 
-## what it does
+```text
+editable local memory
+        ↓
+hybrid retrieval + relevance policy
+        ↓
+grounded answer, abstention, or explicit general-knowledge answer
+        ↓
+owner-approved memory update
+        ↓
+held-out gate accepts or reverts unattended system changes
+```
 
-- **chat grounded in your memory**, streaming, session persistence, verbatim working memory (retrieval of stored turns, not lossy summaries)
-- **compiled ("deep") mode**: the request is decomposed, every step is answered from its own retrieval and must pass a grounding check before the next step may use it, a failing step is split one level deeper, and the final integration is itself verified — if the composed answer is less grounded than its own inputs, code renders the verified findings instead. Toggle it per message; it costs ~3× latency and buys the numbers in the table below.
-- **hybrid retrieval**: dense (qwen3-embedding-0.6b) + BM25 over bodies *and* learned traces, RRF-fused, rank-1 anchored so fusion can never demote the best dense hit
-- **retrieval as policy**: relevance gate (retrieve *nothing* when nothing is relevant — three-way abstention: memory / general knowledge / honest "I don't have that"), soft branch routing (a boost, never a filter), dynamic k
-- **structured project ingest**: point it at a repo, it crawls tree+manifests+source and writes typed memories (tech stack, architecture, missings, a live repo pointer) as a `part-of` hierarchy
-- **web research**: answer from a fetched source with citation (volatile, not persisted) or distill a reusable *ability* (persisted, owner-approved)
-- **slide generation**: "make me a deck about X" → triage → plan → retrieve/research → the model emits a small JSON spec → *code* renders an animated self-contained HTML deck + editable .pptx. The model never touches a file format; that is why the output looks good.
-- **the brain view**: force-graph of the memory tree, node click to edit/delete, one-click consolidation
+The central bet is modest: for a private corpus, representation, retrieval, verification, and maintenance can matter more than moving up one model-size tier.
 
-## current evidence
+## What it does
 
-The following were re-run locally on **2026-08-13** with `qwen3-4b` on the CUDA provider and the current 12-memory private corpus. They are small-corpus results, so they show mechanism behaviour rather than broad generalization.
+- Chats over local memories with streaming responses and session persistence.
+- Imports Markdown, TXT, PDF, and DOCX files. The UI supports drag and drop; imported content becomes a reviewable draft before it becomes memory.
+- Analyzes a local project folder into typed memories for its architecture, stack, open work, and a pointer to the live repository.
+- Retrieves with dense embeddings (`qwen3-embedding-0.6b`) plus BM25, reciprocal-rank fusion, learned retrieval traces, soft branch routing, dynamic `k`, and a relevance floor that can return no memory at all.
+- Distinguishes three cases: answer from memory, answer from general knowledge, or honestly say the needed information is not available.
+- Offers a slower compiled mode: decompose a request, retrieve and verify each sub-answer, and prefer verified findings when final synthesis is less grounded than its inputs.
+- Supports reusable “abilities”: a learned method can be applied to fresh data without retaining that volatile data. `format` abilities can evolve only after deterministic scoring and owner approval.
+- Generates presentations from a model-produced JSON specification; code renders the HTML deck and editable PPTX.
+- Includes a memory graph and consolidation pass that finds weakly retrievable memories, proposes repair queries, surfaces conflicts, and archives low-value candidates reversibly.
 
-| mechanism | current result | what it establishes |
+## What is genuinely interesting here
+
+### Retrieval can learn from successful use
+
+When a memory is retrieved and cited, the query is stored as a `found_by` trace on that memory. Future phrasings can match that trace as well as the memory body. The system records where a memory was actually found; it does not ask a model to rewrite memories merely for search.
+
+### Maintenance is not self-trust
+
+Self-tuned context size, repair questions, summary communities, and archival all change what the system retrieves. Every unattended change is evaluated against a separately curated gate set. A regression is reverted; no gate file means the change is blocked. Online usage signals are separate from the gate so the system cannot grade its own homework.
+
+### Methods and facts have different lifetimes
+
+Project-RAG stores a reusable method separately from current data. For example, “how to evaluate a stock” can be durable; a pasted price or report should be used once and not silently retained.
+
+### Weak models are constrained where they are weak
+
+The model proposes language and structure. Deterministic code owns file formats, numeric bands, tool routing, unsafe redirects, atomic writes, and acceptance decisions. This makes failure modes inspectable and testable.
+
+## Evidence, not marketing
+
+The active evidence below was last run locally on **2026-08-13** using `qwen3-4b` on the CUDA provider and a **12-memory private corpus**. These are small-n, local measurements of mechanism behavior. They do not establish broad generalization or production-scale performance.
+
+| Mechanism | Result | Interpretation |
 |---|---:|---|
-| curated validation gate | **8/9 hit@1 (0.889)** | a real, immutable gate is active; it is no longer an auto-seeded proxy |
-| desire paths | **0/5 → 4/5 hit@1** | one use can make four formerly-unfindable drifted phrasings retrieve their intended memory |
-| self-tuning retrieval | **k 7.0 → 5.8** | the controller removes 17% of retrieved context under oracle citation feedback |
-| gate through tuning | **0.889 → 0.889** at every accepted step | tuning did not reduce curated retrieval hit@1 |
-| deterministic safety suite | **14/14 passed** | fail-closed gate, online/gate separation, redirect safety, atomic writes, and eval schema are covered |
+| Curated held-out retrieval gate | **8/9 hit@1 (0.889)** | A versioned, immutable gate is active. The report includes its one miss. |
+| Learned retrieval traces | **0/5 to 4/5 hit@1** | After one seeded successful use, four drifted phrasings reached their intended memory. |
+| Self-tuned retrieval size | **mean k 7.0 to 5.8** | Under oracle citation feedback, the policy removed 17% of retrieved context while accepted gate score stayed unchanged. |
+| Gate during tuning | **0.889 to 0.889** | Accepted tuning steps did not lower the current held-out retrieval score. |
+| Deterministic safety suite | **16/16 tests passed** | Gate behavior, online/gate separation, redirect safety, atomic writes, evaluation schema, and import extraction are covered. |
 
-`scripts/eval_gate.py`, `scripts/eval_paths.py`, and `scripts/eval_selftune.py` reproduce the first four rows. The gate report intentionally exposes its one miss: the broad historical `foundry-rag` overview outranks the specific UI/UX memory for one UI task. That is a memory-quality issue to fix, not a metric to hide.
+The gate’s visible miss is useful context: a broad historical project overview outranks the specific UI/UX memory for one UI task. That is a corpus or retrieval-quality problem, not a result to hide.
 
-### historical wrapper comparison
+### Historical comparison, clearly labeled
 
-The broader four-arm generation harness has not yet been re-run after the fail-closed gate and benchmark changes. Its last local run is retained below as **historical**, not a current release claim. Re-run `scripts/eval_harness.py` before citing it externally.
+The following four-arm generation run is **historical** (2026-07-27) and has not been rerun after the later benchmark and fail-closed-gate changes. It is retained as a design record, not a current release claim. The same local `qwen3-4b` answered 17 questions: 6 memory facts, 3 drift facts, 5 traps, and 3 general questions. One answer therefore changes a cell by 17–33 percentage points.
 
-**Last run: 2026-07-27. Same model, four wrappers** (`scripts/eval_harness.py`, qwen3-4b on GPU, n=17 questions —
-6 memory / 3 drift / 5 trap / 3 general, so one answer moves a cell by 17–33 points):
+| Arm | Memory fact | Drift fact | Trap abstention | Grounding | Context chars | Seconds / answer |
+|---|---:|---:|---:|---:|---:|---:|
+| Bare model | 17% | 67% | 40% | — | 0 | 31.1 |
+| Naive RAG | **100%** | 67% | 100% | 0.29 | 2,032 | 32.1 |
+| Retrieval policy harness | 83% | 67% | 80% | 0.35 | 4,285 | 38.4 |
+| Compiled, verified mode | 83% | **100%** | 100% | **0.42** | **1,373** | 101.7 |
 
-| arm | memory fact | drift fact | trap abstain | general | grounding | ctx chars | sec/ans |
-|---|---|---|---|---|---|---|---|
-| A bare model | 17% | 67% | 40% | 100% | — | 0 | 31.1 |
-| B naive RAG (flat cosine top-4) | **100%** | 67% | 100% | 100% | 0.29 | 2032 | 32.1 |
-| C harness (retrieval as policy) | 83% | 67% | 80% | 100% | 0.35 | 4285 | 38.4 |
-| D compiled (verified step-program) | 83% | **100%** | 100% | 100% | **0.42** | **1373** | 101.7 |
+The honest reading is not “more machinery always wins.” Naive RAG was best on that memory-fact slice; compiled mode improved drift and grounding at about three times the latency. On a 0.6B model, additional system-prompt complexity also measured worse in earlier work. The project’s lesson is to measure each layer, keep it only when it earns its cost, and document regressions.
 
-The bare model answered a trap question — "the owner's finishing time in the 2019 Istanbul
-Marathon" — with a confident **2:17:06**. The same model inside the harness says it isn't in
-memory. Nothing about the weights changed.
+## Quick start
 
-**Historical model-size experiment** (`docs/eval-ladder.svg`, same suite across the qwen3 family; re-run required before external use)
+### Prerequisites
 
-| | 0.6b | 1.7b | 4b |
-|---|---|---|---|
-| bare, memory facts | 33% | 33% | 33% |
-| harness, memory facts | 50% | 67% | **100%** |
-| harness, sec/ans | 3.0 | 5.6 | 31.8 |
+- Windows
+- Python 3.12 or newer
+- [Microsoft Foundry Local](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/get-started)
+- WebView2 (normally already installed on Windows)
 
-Bare accuracy on personal facts is **flat across a 7× parameter range** — your life is not in the
-weights, so scale cannot buy it. Meanwhile 0.6b + harness (50%, 3.0s) beats 4b bare (33%, ~18s).
-Structure is worth more than a model-size step *and* an order of magnitude faster.
+### Install and run
 
-Two honest limits in that table: the harness's trap resistance is *prompt obedience*, and it only
-locks in at 4b (40% → 40% → 100%) — while compiled mode's checks are *code*, so they hold a 60%
-floor at sizes where prompts fail. And at 0.6b the naive arm beats the harness on memory facts
-(67% vs 50%): the big persona-and-rules prompt overwhelms a 0.6B model. Scaffolding complexity is
-itself a capability cost.
-
-Other historical mechanism runs (older corpus/configuration; re-run before external use):
-
-| thing | baseline | this system |
-|---|---|---|
-| retrieval hit@4 | 0.69 / 0.78 | **0.85 / 0.83** |
-| context size | 100% | **46%** (query-focused compression, post-ranking so it cannot change hit@1) |
-| drift-query findability | 2/7 forever | **6/7 after use** |
-| findability health after one consolidation | — | **50% → 80%** |
-| harmful self-edit (flattened ranking) | silently kept | **gate: REJECT (0.583→0.333), rolled back** |
-
-The honest summary: where vanilla RAG is already strong (clean-corpus hit@1) we only tie. The wins are the axes a static RAG cannot have — learning from use, self-repair, refusing to degrade itself.
-
-## quick start
-
-You need Windows + [Foundry Local](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/get-started) installed, Python 3.12+.
-
-```bash
+```powershell
 git clone https://github.com/faruksevuk/Microsoft-Intern-Project.git
 cd Microsoft-Intern-Project
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-mkdir memory\owner
-copy templates\owner.template.md memory\owner\owner.md   # then edit: who are you, how do you work
+New-Item -ItemType Directory -Force memory\owner
+Copy-Item templates\owner.template.md memory\owner\owner.md
+# Edit memory\owner\owner.md with facts and working preferences you want the system to use.
 .venv\Scripts\python src\app.py
 ```
 
-First run downloads the models (qwen3-embedding-0.6b + qwen3-4b by default; override with `PRAG_CHAT_MODEL`). The app opens as a native window (NiceGUI + WebView2). Your brain starts empty — ingest a project, save a chat reflection, teach it an ability.
+On first run, Foundry Local downloads or loads the embedding model and default chat model (`qwen3-4b`). Set `PRAG_CHAT_MODEL` to select another locally available model. The app opens as a NiceGUI desktop window.
 
-### your GPU is probably idle — this fixes it
+### First five minutes
 
-Foundry Local's Python SDK serves a **CPU-only catalog** until GPU execution providers are
-registered, and registration does **not persist across processes**. So every model resolves to a
-`generic-cpu` build, silently, forever. Even once EPs are registered, the default variant is still
-the CPU one — the GPU build has to be selected explicitly.
+1. Edit `memory/owner/owner.md`; this seeds the private knowledge base.
+2. Open **RAG kaynakları** and drag in a document, paste a note, or analyze a project folder.
+3. Review the proposed summary and approve only what should become durable memory.
+4. Ask a question in chat. Use web research only when you intentionally want fresh external information.
+5. Run consolidation after adding several memories; review repair and archive proposals before accepting them.
 
-The engine now does both at startup (`_ensure_gpu_eps` + `_select_device_variant`), which on a 4GB
-RTX 3050 took inference from ~10 to **~44 tok/s**. Costs ~5s per launch once the EP binaries are
-cached; set `PRAG_DEVICE=cpu` to opt out. Note that `phi-4-mini` has **no CUDA build** in this
-catalog — models that do include qwen3-4b / qwen3-1.7b / qwen3-0.6b / phi-4-mini-reasoning.
+### Privacy model
 
-Your data never leaves the machine. The only network calls are the ones *you* trigger (web research / ability learning), and fetched pages are treated strictly as data, never as instructions.
+Chat, embeddings, stored memory, and evaluation execute locally. The only intentional network action is owner-triggered web research or ability learning; fetched pages are treated as untrusted data and are not retained as memory unless the owner approves a distilled ability.
 
-### local-only by design
+## Reproduce the current checks
 
-Chat, embeddings, memory and evaluation all run through Foundry Local. Project-RAG has no remote chat/API mode and never stores a provider API key.
-
-The only network calls are owner-triggered web research; fetched pages are treated as untrusted data.
-
-## repo layout
-
-```
-src/
-  engine.py     the core: memory, hybrid retrieval policy, salience, reflection,
-                desire paths, self-test, consolidation, abilities, validation gate wiring
-  config.py     every filesystem location in one injectable object — pass one to run
-                an isolated brain (evals, tests) or embed the engine in your own app
-  gate.py       immutable held-out validation gate (accept/reject/rollback for self-edits)
-  planner.py    request decomposition: triage -> plan schema -> repair -> rule fallback
-  slides.py     deck spec parser (tolerant) + animated HTML / pptx renderers
-  research.py   web tool layer (DuckDuckGo/Wikipedia, untrusted-data-only)
-  store.py      markdown+frontmatter memory store
-  app.py        NiceGUI glassmorphism app (chat / brain graph / rag sources)
-schema/         memory file schema, two-tier index, salience rules
-rules/          the constitution: capture/route/update/contradiction/forgetting rules
-templates/      owner template — start here
-scripts/        eval harnesses (A/B retrieval, desire paths, self-tune, gate, jarvis)
-memory/         YOUR brain — gitignored, never shared
-```
-
-## design rules that did the heavy lifting
-
-- **the model never emits a number or a file format.** Importance scores are band-clamped code decisions; decks are JSON specs rendered by code. Weak models can't calibrate; don't ask them to.
-- **rules decide what rules can decide.** Language detection, tool routing, retrieval gating — all deterministic. The model gets only the judgments structure can't make.
-- **never regress below baseline.** The rank-1 anchor, the repair loops, the validation gate — every mechanism is allowed to help or do nothing, never to hurt. (Independently, both [jcode](https://github.com/1jehuang/jcode) and [SkillOpt](https://github.com/microsoft/SkillOpt) converged on the same rule.)
-- **the owner approves writes.** Reflection, ingest, abilities — the model proposes, you adopt. Quality comes from the human + deterministic code, not the model alone.
-- **measure, then keep or revert.** Several ideas in this repo were built, measured worse, and reverted (bullet-level ranking, aggressive audience simplification, a two-tier ranker). The eval scripts are in the repo; the failures are documented in the code comments.
-
-## evaluation protocol
-
-- Keep `cache/gate_tasks.v2.json` as a manually curated, versioned held-out set. Copy
-  `templates/gate_tasks.example.json` as a starting shape, then replace its example IDs.
-  The engine never seeds or modifies this file. Until it exists, unattended self-modification is
-  **blocked** (fail-closed), never silently accepted.
-- Successful real-use queries are recorded separately in `cache/online_monitoring_tasks.json`.
-  They are useful operational evidence, never a validation score.
-- `tests/` covers the deterministic safety core and `.github/workflows/ci.yml` runs syntax and
-  unit checks on every push. Model-backed harnesses remain explicit local runs because they
-  require Foundry models and a representative private corpus.
-
-Run the current evidence suite locally:
+Unit tests run without a local model. Model-backed evaluations require Foundry Local and the representative private corpus, so they are explicit local commands rather than CI jobs.
 
 ```powershell
 .venv\Scripts\python -m pytest -q
@@ -181,24 +141,50 @@ Run the current evidence suite locally:
 .venv\Scripts\python scripts\eval_selftune.py
 ```
 
-## limitations, honestly
+`scripts/eval_gate.py` writes `scripts/eval_gate_report.json`. When rerunning a model-backed evaluation, record its date, corpus description, protocol, and known failures. Do not compare results across changed corpora or task sets as if they were one benchmark.
 
-- the corpus is small (12 memories) and n per eval cell is 3–6; every number is directional, and one answer moves a cell by up to 33 points
-- retrieval is a full scan over all memories each query (fine at this size, wrong at 10k) — the index needs a real vector store before scale claims
-- small local models drift to Turkish on queries containing Turkish proper nouns despite a 3-level language directive — model limit, not fixable by prompting
-- compiled mode verifies *faithfulness*, not *relevance*: a step can be grounded in memory and still not answer its sub-question (measured — it answered "name two projects" with an unrelated but genuinely-stored fact)
-- audience-appropriate pedagogical writing (explain to a 6-year-old) is beyond a 4B model
-- web search is scraping (DuckDuckGo) and inherently flaky; a real search API would harden it
-- ability adoption re-runs its deterministic task-level score and rejects regressions; this is
-  currently available only for `format` abilities. Domain/process abilities remain owner-authored
-  until each has a task-level evaluator; expand those suites as new ability kinds land
-- the eval scorer turned out to be the weakest link: four times in one session it punished a correct answer (a valid paraphrase, three validly-worded refusals). The trap metric now detects **fabrication** — per-question patterns for what an invented claim looks like — instead of hunting for abstention phrases, so honesty is measured rather than wording. Keyword matching on the fact questions stays a known weak spot
-- with the corrected scorer every arm scores 100% trap-safe on the current 12-memory corpus; trap resistance needs harder and more numerous traps before it discriminates between arms again
+GitHub Actions runs syntax compilation and deterministic unit tests on every push and pull request.
 
-## references
+## Repository map
 
-- SkillOpt: executive strategy for self-evolving agent skills — [arXiv:2605.23904](https://arxiv.org/abs/2605.23904) (the validation-gate evidence)
-- lost in the middle, verbatim-beats-summaries line of work that motivated the working memory design
-- [Foundry Local docs](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/)
+```text
+src/            application, retrieval engine, gate, storage, planner, research, slides
+memory/         private Markdown brain; ignored by Git
+cache/          disposable embeddings, policy, gate tasks, and logs; ignored by Git
+rules/          memory-routing, update, contradiction, and forgetting policy
+schema/         memory and evaluation-task schemas
+templates/      starting templates for an owner profile and evaluation tasks
+scripts/        reproducible evaluation and maintenance scripts
+tests/          deterministic regression and safety tests
+docs/           project story and historical visual evaluation material
+```
+
+## Engineering decisions worth noticing
+
+- **Memory is inspectable.** Markdown with YAML front matter is readable, diffable, portable, and independent of one vector database.
+- **The model does not author file formats or safety decisions.** It can propose a deck specification or memory draft; code parses, clamps, writes atomically, and decides whether a change survives a gate.
+- **A rank-1 anchor protects a strong dense match during fusion.** Hybrid retrieval may add evidence but cannot silently demote the best dense result.
+- **Owner approval is the normal write path.** Reflection, document ingest, and ability learning produce editable drafts first.
+- **The gate is fail-closed.** An absent or invalid held-out set blocks unattended self-modification instead of treating no evidence as success.
+- **Evaluation state is isolated.** `Config` lets tests and experiments run in scratch workspaces rather than mutate the owner’s live brain.
+
+## Limits and open work
+
+- The evaluated corpus is tiny, and some evaluation cells have only 3–6 questions. These metrics are directional.
+- Retrieval currently scans all memories; it is appropriate for a personal corpus, not a 10k-document scale claim.
+- Compiled mode verifies grounding or faithfulness, not full relevance. A well-grounded sub-answer can still miss the user’s intent.
+- Retrieval-trace and self-tuning evaluations use controlled or oracle feedback. Real-world benefit needs longer-running monitoring with independently reviewed labels.
+- Trap safety needs harder and more numerous adversarial tasks; scorecards are not a substitute for a security review.
+- Web research uses public-page fetching and can be flaky. A production deployment would use a maintained search API and stronger content isolation.
+- Ability adoption has a task-level evaluator only for `format` abilities. `domain` and `process` abilities remain owner-authored until their evaluators exist.
+- Some small local models drift toward Turkish around Turkish proper nouns despite language instructions. That is a model limitation, not evidence that prompting solved it.
+
+## Further reading
+
+- [Project story](docs/story.html): an annotated walkthrough of the design and evidence.
+- [Microsoft Foundry Local](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/)
+- [SkillOpt](https://arxiv.org/abs/2605.23904): inspiration for validating self-evolving behavior against held-out checks.
+- [AlphaEvolve](https://arxiv.org/abs/2506.13131): inspiration for constrained candidate generation and evaluation.
+- [jcode](https://github.com/1jehuang/jcode): an independent convergence on “never regress below baseline.”
 
 MIT. Built by [Faruk Sevük](https://faruksevuk.com).
