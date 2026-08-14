@@ -1301,7 +1301,10 @@ def main_page():
             if not path:
                 return
             name = (refs["projname"].value or "").strip() or path.replace("\\", "/").rstrip("/").split("/")[-1]
-            note = ui.notification(f"Reading & analyzing '{name}'…", spinner=True, timeout=None)
+            note = ui.notification(
+                f"'{name}' okunuyor ve tek geçişte analiz ediliyor. Model hızına göre kısa süre bekleyebilir.",
+                spinner=True, timeout=None,
+            )
             try:
                 res = await run.io_bound(engine.analyze_project, path, name)
             except Exception as ex:

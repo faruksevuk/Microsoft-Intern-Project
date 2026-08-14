@@ -407,6 +407,31 @@ def read_project(path, max_chars=7000):
     return "\n".join(parts)[:max_chars]
 
 
+def parse_project_analysis(text):
+    """Return every project category from one structured model response.
+
+    Project analysis used to make one completion per category. On a local model that
+    meant six serial streaming calls, so a normal analysis looked like a frozen UI.
+    One bounded response is both faster and easier to recover when formatting drifts.
+    """
+    sections = {cat: [] for cat in PROJECT_CATEGORIES}
+    current = None
+    aliases = {re.sub(r"[^a-z0-9]+", "", cat): cat for cat in PROJECT_CATEGORIES}
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        heading = re.sub(r"^[#*\s]+|[:*\s]+$", "", line).lower()
+        key = re.sub(r"[^a-z0-9]+", "", heading)
+        if key in aliases:
+            current = aliases[key]
+            continue
+        if current and line:
+            sections[current].append(line)
+    return {
+        cat: "\n".join(lines).strip() or "- not clear from the files"
+        for cat, lines in sections.items()
+    }
+
+
 def chunk_text(text, max_chars=520):
     paras = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks, cur = [], ""
@@ -1895,18 +1920,21 @@ class MemoryEngine:
         return {"overview": overview, "chunks": chunk_text(text), "importance": imp, "why": why}
 
     def analyze_project(self, path, name):
-        ctx = read_project(path)
+        ctx = read_project(path, max_chars=5200)
         if not ctx:
             return None
-        cats = {}
-        for cat in PROJECT_CATEGORIES:
-            prompt = (
-                f'From the project "{name or "project"}" below, list 2-4 short bullet points about its {cat} '
-                f'(one per line starting with "- "). Plain text only: no bold, no headers, no preamble. '
-                f'Name concrete files, libraries and mechanisms you can actually see. '
-                f'Base it only on the files shown; if unclear, write "- not clear from the files".\n\n{ctx}'
-            )
-            cats[cat] = self._complete_safe([{"role": "user", "content": prompt}]).strip() or "- (analysis unavailable - retry)"
+        sections = "\n".join(f"## {cat}" for cat in PROJECT_CATEGORIES)
+        prompt = (
+            f'Analyze the local project "{name or "project"}" using only the files below. '
+            'Return exactly these six Markdown headings, in this order, each followed by 2-4 short bullet points: '\
+            f'\n{sections}\n\n'
+            'Name concrete files, libraries, and mechanisms you can actually see. '
+            'If a category is unclear, write "- not clear from the files" under that heading. '
+            'Do not add a preamble, conclusion, or extra headings.\n\n'
+            f'{ctx}'
+        )
+        raw = self._complete_safe([{"role": "user", "content": prompt}])
+        cats = parse_project_analysis(raw)
         return {"path": path, "name": name, "categories": cats}
 
     def save_project(self, name, path, categories):
