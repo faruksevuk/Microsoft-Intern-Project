@@ -497,7 +497,10 @@ class MemoryEngine:
         try:
             if any(not e.is_registered for e in self.manager.discover_eps()):
                 t0 = time.time()
-                res = self.manager.download_and_register_eps()   # all at once: per-name calls are unreliable
+                # Only CUDA is relevant to this application. Asking Foundry to fetch
+                # every discoverable provider also includes WebGPU and TensorRT, which
+                # can make startup wait on unrelated runtimes on a CUDA-only laptop.
+                res = self.manager.download_and_register_eps(names=["CUDAExecutionProvider"])
                 print(f"[engine] GPU EPs registered in {time.time() - t0:.1f}s "
                       f"({sorted(set(res.registered_eps))})")
         except Exception as ex:

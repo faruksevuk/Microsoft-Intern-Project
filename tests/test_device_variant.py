@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -30,3 +31,22 @@ def test_cpu_mode_overrides_a_cached_gpu_variant(monkeypatch):
 
     assert engine.MemoryEngine._select_device_variant(model) == "cpu"
     assert model.id == "qwen-generic-cpu:1"
+
+
+def test_gpu_setup_requests_only_cuda_provider(monkeypatch):
+    monkeypatch.setattr(engine, "PRAG_DEVICE", "auto")
+    requested = []
+
+    class Manager:
+        def discover_eps(self):
+            return [SimpleNamespace(name="CUDAExecutionProvider", is_registered=False)]
+
+        def download_and_register_eps(self, names):
+            requested.append(names)
+            return SimpleNamespace(registered_eps=["CUDAExecutionProvider"])
+
+    instance = object.__new__(engine.MemoryEngine)
+    instance.manager = Manager()
+    instance._ensure_gpu_eps()
+
+    assert requested == [["CUDAExecutionProvider"]]
