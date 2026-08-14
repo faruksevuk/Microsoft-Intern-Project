@@ -594,11 +594,8 @@ def main_page():
             return
         refs["inp"].value = ""
         add_bubble(q, True)
-        # routing: explicit rules keep clear cases; the model reasons over the middle
-        # ground and its proposal passes deterministic gates (engine.decide_action)
+        # Tool workflows are strictly opt-in: ordinary chat always remains RAG chat.
         decision = await run.io_bound(engine.decide_action, q)
-        if decision.get("source") == "model" and decision.get("why"):
-            ui.notify(f'yönlendirme (model): {decision["action"]} · {decision["why"]}')
         if decision["action"] == "slides":
             await make_deck(q)
             return

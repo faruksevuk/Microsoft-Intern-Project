@@ -45,7 +45,7 @@ The central bet is modest: for a private corpus, representation, retrieval, veri
 - Distinguishes three cases: answer from memory, answer from general knowledge, or honestly say the needed information is not available.
 - Offers a slower compiled mode: decompose a request, retrieve and verify each sub-answer, and prefer verified findings when final synthesis is less grounded than its inputs.
 - Supports reusable “abilities”: a learned method can be applied to fresh data without retaining that volatile data. `format` abilities can evolve only after deterministic scoring and owner approval.
-- Generates presentations from a model-produced JSON specification; code renders the HTML deck and editable PPTX.
+- Generates presentations only on an explicit request (for example, “sunum oluştur”); ordinary chat questions always stay in the RAG answer path. The deck comes from a model-produced JSON specification and code renders the HTML deck and editable PPTX.
 - Includes a memory graph and consolidation pass that finds weakly retrievable memories, proposes repair queries, surfaces conflicts, and archives low-value candidates reversibly.
 
 ## What is genuinely interesting here
