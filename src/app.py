@@ -800,7 +800,7 @@ def main_page():
     async def consolidate_ui():
         note = ui.notification("Konsolidasyon: saklambaç + otomatik onarım + çelişki/budama taraması…", spinner=True, timeout=None)
         try:
-            rep = await run.io_bound(engine.run_consolidation)
+            rep = await run.io_bound(engine.run_consolidation, False)
         except Exception as ex:
             note.dismiss()
             ui.notify(f"Konsolidasyon başarısız: {ex}", type="negative")

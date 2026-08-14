@@ -19,6 +19,15 @@ def test_stream_filter_never_reveals_reasoning_tokens():
     assert engine.visible_stream_text("Answer") == "Answer"
 
 
+def test_chat_boundary_never_writes_retrieval_examples(tmp_path):
+    instance = object.__new__(engine.MemoryEngine)
+    instance.cfg = engine.Config(root=tmp_path)
+    instance.memories = []
+
+    assert instance._wear_paths("what is showcase", "A plausible answer.") == []
+    assert not instance.cfg.online_tasks_path.exists()
+
+
 def test_package_manifest_stack_facts_are_exact(tmp_path):
     (tmp_path / "package.json").write_text(
         '{"dependencies":{"next":"16.3.0","react":"19.2.3"},'

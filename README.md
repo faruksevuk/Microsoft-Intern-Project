@@ -12,7 +12,7 @@ This is a carefully engineered **small-corpus local RAG system**, not a new foun
 
 - Markdown memories with YAML metadata instead of an opaque hosted database.
 - Hybrid dense + lexical retrieval with a relevance gate and dynamic context size.
-- Retrieval traces that make memories easier to find after successful use.
+- Owner-approved retrieval examples that make memories easier to find after review.
 - A fail-closed validation gate for automated repairs, pruning, community summaries, and retrieval-policy changes.
 - Owner approval before durable model-proposed writes.
 
@@ -41,7 +41,7 @@ The central bet is modest: for a private corpus, representation, retrieval, veri
 - Chats over local memories with streaming responses and session persistence.
 - Imports Markdown, TXT, PDF, and DOCX files. The UI supports drag and drop; imported content becomes a reviewable draft before it becomes memory.
 - Analyzes a local project folder into typed memories for its architecture, stack, open work, and a pointer to the live repository.
-- Retrieves with dense embeddings (`qwen3-embedding-0.6b`) plus BM25, reciprocal-rank fusion, learned retrieval traces, soft branch routing, dynamic `k`, and a relevance floor that can return no memory at all.
+- Retrieves with dense embeddings (`qwen3-embedding-0.6b`) plus BM25, reciprocal-rank fusion, owner-approved retrieval examples, soft branch routing, dynamic `k`, and a relevance floor that can return no memory at all.
 - Distinguishes three cases: answer from memory, answer from general knowledge, or honestly say the needed information is not available.
 - Offers a slower compiled mode: decompose a request, retrieve and verify each sub-answer, and prefer verified findings when final synthesis is less grounded than its inputs.
 - Supports reusable “abilities”: a learned method can be applied to fresh data without retaining that volatile data. `format` abilities can evolve only after deterministic scoring and owner approval.
@@ -52,7 +52,7 @@ The central bet is modest: for a private corpus, representation, retrieval, veri
 
 ### Retrieval can learn from successful use
 
-When a memory is retrieved and cited, the query is stored as a `found_by` trace on that memory. Future phrasings can match that trace as well as the memory body. The system records where a memory was actually found; it does not ask a model to rewrite memories merely for search.
+Chat responses never alter retrieval ranking. A query example can affect future retrieval only after the owner reviews and approves it during a repair pass; it is then stored as an `approved_queries` example. This prevents a model from reinforcing a retrieval mistake with its own answer.
 
 ### Maintenance is not self-trust
 

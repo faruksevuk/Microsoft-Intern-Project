@@ -773,10 +773,10 @@ class MemoryEngine:
         persona = "\n".join(l for l in "\n".join(owner_bodies).split("\n")
                             if "language i use" not in l.lower() and "reply in the language" not in l.lower())
         self.owner_persona = (persona.strip()[:1400]) or "(owner profile not set yet)"
-        # BM25 (lexical) over body + learned desire-path traces (found_by), so a memory
-        # becomes findable by the queries it was previously found-and-used by.
+        # Only owner-approved retrieval examples may affect ranking. Raw live-chat
+        # observations are excluded: a model cannot grade its own answer.
         for m in self.memories:
-            fb = m["meta"].get("found_by")
+            fb = m["meta"].get("approved_queries")
             m["traces"] = fb if isinstance(fb, list) else ([fb] if fb else [])
             m["btoks"] = tokenize(m["body"] + " " + " ".join(m["traces"]))
         self._bm25_prepare()
@@ -821,14 +821,14 @@ class MemoryEngine:
         meta = m["meta"]
         tags = meta.get("tags")
         tags = ", ".join(tags) if isinstance(tags, list) else (tags or "")
-        fb = meta.get("found_by")
+        fb = meta.get("approved_queries")
         fb = " / ".join(fb) if isinstance(fb, list) else (fb or "")
         line = (f'{meta.get("id", "?")} | {meta.get("branch", "?")}/{meta.get("project", "")} | '
                 f'{meta.get("summary", "")} | {tags}')
         return line + (f" | asked: {fb}" if fb else "")
 
     def _refresh_index_line(self, m):
-        """Re-embed one memory's index line after its found_by/summary changed."""
+        """Re-embed one memory's index line after approved queries change."""
         m["index_text"] = self._index_text(m)
         vec = self._embed_cached(m["index_text"])
         for i, mm in enumerate(self.memories):
@@ -1001,10 +1001,9 @@ class MemoryEngine:
         return self.session is not None and len(self.session.get("messages", [])) >= SESSION_CAP
 
     def _dense_score(self, q_vec, m):
-        """Body-cosine, boosted by the best learned desire-path trace (found_by).
-        A memory found-and-used by a past query becomes reachable by similar queries
-        even when its body wording differs. max() means traces can only ADD - a memory
-        with no traces scores exactly its body cosine, so the verified hit@1 is held."""
+        """Body-cosine, boosted only by owner-approved retrieval examples.
+        Examples can improve phrasing recall, but live model output never creates them.
+        max() means examples can only add; a memory with none uses its body cosine."""
         base = cosine(q_vec, self._body_vector(m))
         if m.get("traces"):
             tb = max(cosine(q_vec, self._embed_cached(t)) for t in m["traces"])
@@ -1025,7 +1024,7 @@ class MemoryEngine:
 
     def _select_memories(self, q_vec, query=""):
         """Retrieval-as-policy: (1) SOFT-ROUTE - nudge the likeliest branch up, (2) rank
-        by RRF of dense (body-cosine + found_by traces) and BM25 (body + traces), rank-1
+        by RRF of dense (body-cosine + approved examples) and BM25 (body + examples), rank-1
         stays the dense top, (3) GATE - if the best dense match is below RELEVANCE_GATE,
         return nothing (the prompt then answers from general knowledge or abstains on a
         personal gap - no fabrication), (4) DYNAMIC k - keep the relatively-strong cluster
@@ -1521,54 +1520,14 @@ class MemoryEngine:
         self.update_memory(parent_id, parent["body"].rstrip() + f"\n\n[update {today}]\n{overview}")
         return parent_id
 
-    # ---- desire paths: findability learns from use, knowledge stays pure ----
     def _wear_paths(self, query, answer):
-        """After an answer: memories actually CITED by it earn the query as a
-        found_by trace on their index line. Guards (from rules/scoring.md):
-        citation_sim gate, no-paving-highways (top index hit earns nothing),
-        meaning-dedup replacement, max_traces cap."""
-        picked = getattr(self, "_last_picked", []) or []
-        if not picked or not answer.strip():
-            return []
-        sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", answer) if len(s.strip()) >= 30][:6]
-        if not sents:
-            return []
-        sent_vecs = [self._embed(s) for s in sents]
-        cite_sim = float(self.param("citation_sim", 0.60))
-        dedup_sim = float(self.param("trace_dedup_sim", 0.90))
-        max_traces = int(self.param("max_traces", 3))
-        trace = query.replace(",", " ").replace("[", "(").replace("]", ")").strip()[:80]
-        if not trace:
-            return []
-        trace_vec = self._embed(trace)
-        worn, cited_count = [], 0
-        top_cite = 0.0
-        for m, index_rank in picked:
-            strength = max(cosine(v, self._body_vector(m)) for v in sent_vecs)
-            cited = strength >= cite_sim
-            if m is picked[0][0]:
-                top_cite = strength
-            if cited:
-                cited_count += 1                      # feedback signal (all citations, incl. the top hit)
-            if index_rank <= 1 or not cited:          # no paving highways / not actually used -> no trace
-                continue
-            traces = list(m["meta"].get("found_by") or [])
-            for i, t in enumerate(traces):
-                if cosine(trace_vec, self._embed(t)) >= dedup_sim:
-                    traces[i] = trace                 # refresh the near-duplicate, keep diversity
-                    break
-            else:
-                traces = (traces + [trace])[-max_traces:]
-            m["meta"]["found_by"] = traces
-            patch_meta(m["path"], {"found_by": traces})
-            self._refresh_index_line(m)
-            worn.append(m["meta"].get("id"))
-        self._record_retrieval_feedback(len(picked), cited_count)   # feeds the self-tuning policy
-        # Real-use observations are useful for monitoring, but never for the immutable
-        # held-out gate. Mixing them would let the system tune against its own exam.
-        if top_cite >= 0.68 and len(trace) >= 12 and picked:
-            self._mint_online_task(trace, picked[0][0]["meta"].get("id"))
-        return worn
+        """Keep the normal chat boundary read-only for retrieval policy.
+
+        A query example becomes a ranking feature only after an owner reviews it in
+        ``repair_memory``. The explicit no-op prevents a model answer from becoming
+        its own training label.
+        """
+        return []
 
     def _mint_online_task(self, query, mem_id):
         """Append a real-use observation for monitoring only (deduped and capped)."""
@@ -1595,15 +1554,15 @@ class MemoryEngine:
         m = self._find(mem_id)
         if not m:
             return False
-        traces = list(m["meta"].get("found_by") or [])
+        traces = list(m["meta"].get("approved_queries") or [])
         if not (0 <= idx < len(traces)):
             return False
         traces.pop(idx)
-        m["meta"]["found_by"] = traces
+        m["meta"]["approved_queries"] = traces
         if traces:
-            patch_meta(m["path"], {"found_by": traces})
+            patch_meta(m["path"], {"approved_queries": traces})
         else:
-            patch_meta(m["path"], {}, remove=("found_by",))
+            patch_meta(m["path"], {}, remove=("approved_queries",))
         self._refresh_index_line(m)
         return True
 
@@ -1644,31 +1603,34 @@ class MemoryEngine:
         return {"score": score, "results": results}
 
     def repair_memory(self, mem_id, questions):
-        """Prescribed doc2query: seed approved questions into found_by so the
+        """Prescribed doc2query: seed owner-approved questions so the
         lost node becomes findable. Returns (old_rank, new_rank)."""
         m = self._find(mem_id)
         if not m:
             return None
         old = self._probe_rank(m)
         max_total = int(self.param("max_traces", 3)) + 2
-        traces = list(m["meta"].get("found_by") or [])
+        traces = list(m["meta"].get("approved_queries") or [])
         for q in questions:
             q = q.replace(",", " ").strip()[:80]
             if q and q not in traces:
                 traces.append(q)
         traces = traces[-max_total:]
-        m["meta"]["found_by"] = traces
-        patch_meta(m["path"], {"found_by": traces})
+        m["meta"]["approved_queries"] = traces
+        patch_meta(m["path"], {"approved_queries": traces})
         self._refresh_index_line(m)
         return old, self._probe_rank(m)
 
     # ---- the self-training / 'dream' maintenance cycle ----
-    def run_consolidation(self, auto=True, deep=True):
+    def run_consolidation(self, auto=False, deep=True):
         """One maintenance pass: (1) IMMUNE - the self-test finds memories that can't be
         found by their own content; each lost node gets doc2query repair traces (auto-
         approved in autonomous mode). (2) DREAM - flag contradictions and prune candidates
         for the owner. Health (findability %) is logged every run, so improvement over
         time is a visible curve. Returns a report of what changed / what needs the owner."""
+        # This report may propose repairs, but never approves or applies them itself.
+        # The owner-reviewed repair action is the only write boundary for examples.
+        auto = False
         before = self.self_test(deep=deep)
         repaired, gate_res = [], None
         if auto:
@@ -1900,7 +1862,7 @@ class MemoryEngine:
         m = self._find(mem_id)
         if not m:
             return None
-        fb = m["meta"].get("found_by")
+        fb = m["meta"].get("approved_queries")
         return {
             "id": m["meta"].get("id"),
             "branch": m["meta"].get("branch"),
