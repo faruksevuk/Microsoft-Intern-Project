@@ -505,9 +505,17 @@ class MemoryEngine:
 
     @staticmethod
     def _select_device_variant(model):
-        """Select the gpu build when one exists. Must run BEFORE download/load —
-        all IModel operations target the selected variant. Returns 'gpu'/'cpu'."""
-        if PRAG_DEVICE != "cpu":
+        """Select an explicit CPU or GPU build before download/load.
+
+        Foundry prefers a cached variant automatically. That is normally helpful,
+        but it can leave a CUDA variant selected when the user has deliberately
+        set ``PRAG_DEVICE=cpu`` because the CUDA execution provider is unavailable.
+        """
+        if PRAG_DEVICE == "cpu":
+            cpu = next((v for v in model.variants if "generic-cpu" in v.id.lower()), None)
+            if cpu is not None:
+                model.select_variant(cpu)
+        else:
             for key in GPU_VARIANT_KEYS:
                 v = next((v for v in model.variants if key in v.id.lower()), None)
                 if v is not None:
