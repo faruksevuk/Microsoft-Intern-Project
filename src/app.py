@@ -1302,11 +1302,21 @@ def main_page():
                 return
             name = (refs["projname"].value or "").strip() or path.replace("\\", "/").rstrip("/").split("/")[-1]
             note = ui.notification(
-                f"'{name}' okunuyor ve tek geçişte analiz ediliyor. Model hızına göre kısa süre bekleyebilir.",
+                f"'{name}' okunuyor ve tek geçişte kısa bir analiz oluşturuluyor. Bu adım normalde bir dakikadan kısa sürer.",
                 spinner=True, timeout=None,
             )
             try:
-                res = await run.io_bound(engine.analyze_project, path, name)
+                res = await asyncio.wait_for(
+                    run.io_bound(engine.analyze_project, path, name), timeout=75,
+                )
+            except TimeoutError:
+                note.dismiss()
+                ui.notify(
+                    "Proje analizi 75 saniye içinde yanıt vermedi. Lokal model yanıt vermiyor; "
+                    "Ayarlar'dan modeli kontrol edip tekrar deneyin.",
+                    type="negative",
+                )
+                return
             except Exception as ex:
                 note.dismiss()
                 ui.notify(f"Analyze failed: {ex}", type="negative")

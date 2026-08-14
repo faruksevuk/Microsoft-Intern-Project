@@ -41,12 +41,13 @@ def test_project_analysis_uses_one_model_completion(monkeypatch):
     calls = []
     monkeypatch.setattr(engine, "read_project", lambda path, max_chars: "=== src/app.py ===\nprint('ok')")
 
-    def complete(messages):
-        calls.append(messages)
+    def complete(messages, **kwargs):
+        calls.append((messages, kwargs))
         return "\n".join(f"## {cat}\n- grounded detail" for cat in PROJECT_CATEGORIES)
 
     instance._complete_safe = complete
     result = instance.analyze_project("D:/demo", "demo")
 
     assert len(calls) == 1
+    assert calls[0][1]["max_tokens"] == engine.PROJECT_ANALYSIS_MAX_TOKENS
     assert result["categories"]["architecture"] == "- grounded detail"
